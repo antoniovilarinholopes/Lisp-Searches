@@ -22,10 +22,12 @@
 ;;;  )
 
 (defun sondagem-iterativa (problema) 
-  (let* ((objectivo? (problema-objectivo? problema))
-         (estado= (problema-estado= problema))
-         (solucao nil)
-        )
+  (let* ((*nos-gerados* 0)
+	  	(*nos-expandidos* 0)
+	  	(tempo-inicio (get-internal-run-time))
+  		(objectivo? (problema-objectivo? problema))
+        (estado= (problema-estado= problema))
+        (solucao nil))
     
         (labels ((esta-no-caminho? (estado caminho)
                                    (member estado caminho :test estado=))
