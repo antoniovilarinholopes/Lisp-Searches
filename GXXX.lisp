@@ -23,11 +23,11 @@
 
 (defun sondagem-iterativa (problema) 
   (let* ((*nos-gerados* 0)
-	  	(*nos-expandidos* 0)
-	  	(tempo-inicio (get-internal-run-time))
-  		(objectivo? (problema-objectivo? problema))
-        (estado= (problema-estado= problema))
-        (solucao nil))
+	 (*nos-expandidos* 0)
+	 (tempo-inicio (get-internal-run-time))
+  	 (objectivo? (problema-objectivo? problema))
+         (estado= (problema-estado= problema))
+         (solucao nil))
     
         (labels ((esta-no-caminho? (estado caminho)
                                    (member estado caminho :test estado=))
@@ -37,7 +37,10 @@
                                     (t 
                                      (let* ((sucessores (problema-gera-sucessores problema estado))
                                             (num-elem (length sucessores)))
-                                       (lanca-sonda (nth (random num-elem) sucessores))
+                                       (if(equal num-elem 0)
+                                           nil
+                                         (lanca-sonda (nth (random num-elem) sucessores))
+                                         )
                                        )
                                      )
                                     ) 
