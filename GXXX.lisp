@@ -2,47 +2,149 @@
 (load (compile-file "procura.lisp"))
 (load (compile-file "job-shop-problemas-modelos.lisp"))
 
+
+(defun calendarizacao (job-shop-problem procura-str) 
+  (let ((internal-problema (converte-para-estado-interno job-shop-problem))
+	(result nil))
+    (cond ((equal procura-str "ILDS") (ilds internal-problema))
+	  ((equal procura-str "Iterative-Sampling") (sondagem-iterativa internal-problema))
+	  (t
+	    (procura internal-problema procura-str))
+	    )
+    )
+  )
+
+
+
+J0: T0 nil
+    T1 nil
+J1: T0 nil
+    T1 nil
+J2: T0 nil
+    T1 nil
+
+foreach job in jobs:
+  task := get_next_task
+  task_others := get_others_task
+
+1ª
+J0: T0 0
+    T1 nil
+J1: T0 nil
+    T1 nil
+J2: T0 nil
+    T1 nil
+    
+J0: T0 nil
+    T1 nil
+J1: T0 0
+    T1 nil
+J2: T0 nil
+    T1 nil
+    
+J0: T0 nil
+    T1 nil
+J1: T0 nil
+    T1 nil
+J2: T0 0
+    T1 nil
+    
+2ª   
+J0: T0 0
+    T1 T0.D
+J1: T0 nil
+    T1 nil
+J2: T0 nil
+    T1 nil
+    
+J0: T0 0
+    T1 nil
+J1: T0 0
+    T1 nil
+J2: T0 nil
+    T1 nil
+    
+J0: T0 0
+    T1 nil
+J1: T0 nil
+    T1 nil
+J2: T0 0
+    T1 nil  
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; Job Shop aux
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
 (defstruct job-schedule 
   job-shop-problem
   best-schedule
   )
 
-(defun calendarizacao () )
+ ;Used to propagate time constraint from task precendence and machine precendence
+(defstruct job-task-w-constr
+  job-task
+  virtual-time
+  )
+  
+(defun converte-para-visualizacao (estado-interno)
+  ) 
 
+(defun converte-para-estado-interno (job-shop-prob) 
+  (let ((operadores (list #'inicia-task))
+	(n.jobs (job-shop-problem-n.jobs job-shop-prob))
+	;(estado-inicial (make-array '()))
+	)
+	;inicializar todos os tempos virtuais a 0
+    (cria-problema estado-inicial operadores)
+    )
+  )
+  
+ 
+;operador
+;operador assume que as tasks estao ordenadas por ordem crescente
+;estado interno e' um array de job-task-w-constr
+(defun inicia-task (estado)
+  (let ((sucessores '())
+	(dimensions (array-dimensions estado))
+	(columns (car dimensions))
+	(rows (cdr dimensions)));numero de jobs igual ao numero de linhas
+    ()
+    )
+  )  
 
-
-
-
-
-
-
-
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-; Job Shop aux
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+(defun propaga-restr-tempo (estado maquina last-start-time task-duration)
+  (let* ((virtual-time-inc (+ last-start-time task-duration))
+	(dimensions (array-dimensions estado))
+	(columns (car dimensions))
+	(rows (cdr dimensions))
+	)
+     ;para cada maquina que ainda nao tenha start time, propaga o tempo virtual, actualizando o anterior
+     (loop for job from 0 to rows
+	(loop named inner for task from 0 to columns
+	  ;nao e' garantido que todos os jobs tenham o mesmo numero de tarefas
+	  (if (null (aref estado job task)) 
+	      (return-from inner)
+	    ;Caso exista
+	    (let* ((job-task-actual (job-task-w-constr-job-task (aref estado job task)))
+		  (nr.maquina (job-shop-task-machine.nr job-task-actual))
+		  ;(duration (job-shop-task-duration job-task-actual))
+		  (start.time (job-shop-task-start.time job-task-actual))
+		  (virt-time (job-task-w-constr-virtual-time (aref estado job task)))
+		  )
+	      ;caso seja a maquina escolhida no operador que gera os sucessores e nao tenha sido ainda escolhida,
+	      ;actualiza o valor virtual de inicio
+	      (if (and (= maquina nr.maquina) (null start.time))
+		  (setf (job-task-w-constr-virtual-time (aref estado job task)) (+ virt-time virtual-time-inc))
+		  )
+	     )
+	    )
+	  )
+	)  
+      )
+  )  
+  
+  
+(defun optimize-schedule (job-problem)
+  )
 
 
 
