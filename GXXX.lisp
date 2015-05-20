@@ -2,6 +2,11 @@
 (load (compile-file "procura.lisp"))
 (load (compile-file "job-shop-problemas-modelos.lisp"))
 
+(defstruct job-schedule 
+  job-shop-problem
+  best-schedule
+  )
+
 (defun calendarizacao () )
 
 
