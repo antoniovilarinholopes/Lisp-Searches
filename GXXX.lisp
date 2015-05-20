@@ -84,10 +84,10 @@
 ;operador assume que as tasks estao ordenadas por ordem crescente
 ;estado interno e' um array de job-task-w-constr
 (defun inicia-task (estado)
-  (let ((sucessores '())
-	(dimensions (array-dimensions estado))
-	(columns (car dimensions))
-	(rows (cdr dimensions)));numero de jobs igual ao numero de linhas
+  (let* ((sucessores '())
+	       (dimensions (array-dimensions estado))
+	       (columns (car dimensions))
+	       (rows (cdr dimensions)));numero de jobs igual ao numero de linhas
     (loop for job from 0 to rows do
       (let* ((prox-task (proxima-tarefa estado job))
 	    (novo-estado nil)
@@ -105,7 +105,7 @@
 		  ;o numero da maquina
 		  (setf nr.maquina (job-shop-task-machine.nr job-task))
 		  ;actualizar o tempo de inicio do job 
-		  (setf (job-shop-task-start.time job-task) (job-task-w-constr-virtual-time))
+		  (setf (job-shop-task-start.time job-task) (job-task-w-constr-virtual-time (aref estado job prox-task)))
 		  (setf last-start-time (job-shop-task-start.time job-task))
 		  (setf task-duration (job-shop-task-duration job-task))
 		  (propaga-restr-tempo novo-estado nr.maquina last-start-time task-duration)
@@ -159,7 +159,6 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;FIXME last search option
 
-
 ;;;;;;;;;;;;;
 ;ILDS
 ;;;;;;;;;;;;;
@@ -176,7 +175,7 @@
     
         (labels ((ildsProbe (estado maxDiscrepancia rProfundidade)
                     (let* ((sucessores (problema-gera-sucessores problema estado))
-                           (num-elem (length(sucessores))))
+                           (num-elem (length sucessores)))
                          (cond 	((funcall objectivo? estado) (list estado))
                          		((eq 0 num-elem) nil)
                          		(t 
@@ -216,7 +215,6 @@
                                        (if(equal num-elem 0)
                                            nil
                                          (lanca-sonda (nth (random num-elem) sucessores))))))))
-                 (while(null solucao) 
+                 (unless (null solucao) 
                    (setf solucao (lanca-sonda (problema-estado-inicial problema))))
                  (return-from sondagem-iterativa (list solucao)))))
-
