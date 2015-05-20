@@ -4,13 +4,60 @@
 
 (defun calendarizacao () )
 
+
+
+
+
+
+
+
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; Job Shop aux
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; Searches implementation
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;FIXME last search option
+
+
+;;;;;;;;;;;;;
+;ILDS
+;;;;;;;;;;;;;
 ;Ref para ilds pseudo-codigo
 ;http://delivery.acm.org/10.1145/2020000/2019581/a1_6-prosser.pdf?ip=194.210.231.19&id=2019581&acc=ACTIVE%20SERVICE&key=2E5699D25B4FE09E%2EF7A57B2C5B227641%2E4D4702B0C3E38B35%2E4D4702B0C3E38B35&CFID=675816888&CFTOKEN=37766688&__acm__=1432052157_b9aa95a702e113482df3bdaed4e3b506
 (defun ilds (problema) 
   (let ((*nos-gerados* 0)
-	 	(*nos-expandidos* 0)
-	 	(tempo-inicio (get-internal-run-time))
-	 	(objectivo? (problema-objectivo? problema))
+	(*nos-expandidos* 0)
+	(tempo-inicio (get-internal-run-time))
+	;(objectivo? (problema-objectivo? problema))
         (estado= (problema-estado= problema))
         (numMaxDiscrepancia 4)
         (result nil))
@@ -35,16 +82,19 @@
 					(when (not (null result))
 						(return-from ilds result))))))
 
+;;;;;;;;;;;;;;;;;;;;;
+;Iterative-Sampling
+;;;;;;;;;;;;;;;;;;;;;
 (defun sondagem-iterativa (problema) 
   (let* ((*nos-gerados* 0)
-	 	 (*nos-expandidos* 0)
-	 	 (tempo-inicio (get-internal-run-time))
-  	 	 (objectivo? (problema-objectivo? problema))
-         (estado= (problema-estado= problema))
-         (solucao nil))
+	 (*nos-expandidos* 0)
+	 (tempo-inicio (get-internal-run-time))
+	 ;(objectivo? (problema-objectivo? problema))
+	 (estado= (problema-estado= problema))
+	 (solucao nil))
     
-        (labels ((esta-no-caminho? (estado caminho)
-                                   (member estado caminho :test estado=))
+        (labels (#|(esta-no-caminho? (estado caminho)
+                                   (member estado caminho :test estado=))|#
                  (lanca-sonda (estado)
                               (cond ((funcall objectivo? estado) (list estado))
                                     ((null estado) nil)
