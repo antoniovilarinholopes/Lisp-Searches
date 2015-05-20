@@ -15,61 +15,6 @@
   )
 
 
-
-J0: T0 nil
-    T1 nil
-J1: T0 nil
-    T1 nil
-J2: T0 nil
-    T1 nil
-
-foreach job in jobs:
-  task := get_next_task
-  task_others := get_others_task
-
-1ª
-J0: T0 0
-    T1 nil
-J1: T0 nil
-    T1 nil
-J2: T0 nil
-    T1 nil
-    
-J0: T0 nil
-    T1 nil
-J1: T0 0
-    T1 nil
-J2: T0 nil
-    T1 nil
-    
-J0: T0 nil
-    T1 nil
-J1: T0 nil
-    T1 nil
-J2: T0 0
-    T1 nil
-    
-2ª   
-J0: T0 0
-    T1 T0.D
-J1: T0 nil
-    T1 nil
-J2: T0 nil
-    T1 nil
-    
-J0: T0 0
-    T1 nil
-J1: T0 0
-    T1 nil
-J2: T0 nil
-    T1 nil
-    
-J0: T0 0
-    T1 nil
-J1: T0 nil
-    T1 nil
-J2: T0 0
-    T1 nil  
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ; Job Shop aux
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -88,13 +33,49 @@ J2: T0 0
 (defun converte-para-visualizacao (estado-interno)
   ) 
 
+;FIXME
 (defun converte-para-estado-interno (job-shop-prob) 
   (let ((operadores (list #'inicia-task))
 	(n.jobs (job-shop-problem-n.jobs job-shop-prob))
-	;(estado-inicial (make-array '()))
+	(estado-inicial nil)
+	(max-num-tasks 0)
+	(jobs (job-shop-problem-jobs job-shop-prob))
 	)
-	;inicializar todos os tempos virtuais a 0
+	(loop for job from 0 to n.jobs do
+	  (if (> (list-length (nth job jobs)) max-num-tasks)
+	      (setf max-num-tasks  (list-length (nth job jobs)))
+	      )
+	  )
+	(setf estado-inicial (make-array (list n.jobs max-num-tasks)))
+	(dotimes (job n.jobs)
+	  (let* ((job-tasks (job-shop-job-tasks (nth job jobs)))
+		)
+	    (dolist (task job-tasks)
+	      (let* ((job-task-wrapper (make-job-task-w-constr task 0))
+		      (task-nr (job-shop-task-task.nr task))
+		      )
+		    (setf (aref estado-inicial job task-nr) job-task-wrapper)
+	    
+		    )
+	      )
+	    )
+	   )
+    ;outros com precedencias
     (cria-problema estado-inicial operadores)
+    )
+  )
+  
+
+(defun proxima-tarefa (estado job)
+  (let* ((dimensions (array-dimensions estado))
+	(columns (car dimensions))
+	)
+    (loop for task from 0 to columns do 
+      (if (null (job-shop-task-start.time (job-task-w-constr-job-task (aref estado job task))))
+	  (return-from proxima-tarefa task)
+	 )
+      )
+    (return-from proxima-tarefa nil)	  	
     )
   )
   
@@ -107,8 +88,32 @@ J2: T0 0
 	(dimensions (array-dimensions estado))
 	(columns (car dimensions))
 	(rows (cdr dimensions)));numero de jobs igual ao numero de linhas
-    ()
-    )
+    (loop for job from 0 to rows do
+      (let* ((prox-task (proxima-tarefa estado job))
+	    (novo-estado nil)
+	    (job-task nil)
+	    (nr.maquina nil)
+	    (last-start-time nil)
+	    (task-duration nil)
+	    )
+	    (if (not(null prox-task))
+		(progn
+		  ;novo-estado sucessor 
+		  (setf novo-estado (copy-array estado))
+		  ;o job-shop-task
+		  (setf job-task (job-task-w-constr-job-task (aref estado job prox-task)))
+		  ;o numero da maquina
+		  (setf nr.maquina (job-shop-task-machine.nr job-task))
+		  ;actualizar o tempo de inicio do job 
+		  (setf (job-shop-task-start.time job-task) (job-task-w-constr-virtual-time))
+		  (setf last-start-time (job-shop-task-start.time job-task))
+		  (setf task-duration (job-shop-task-duration job-task))
+		  (propaga-restr-tempo novo-estado nr.maquina last-start-time task-duration)
+		  )
+		 )
+	  )
+	)
+      )
   )  
 
 (defun propaga-restr-tempo (estado maquina last-start-time task-duration)
@@ -118,8 +123,8 @@ J2: T0 0
 	(rows (cdr dimensions))
 	)
      ;para cada maquina que ainda nao tenha start time, propaga o tempo virtual, actualizando o anterior
-     (loop for job from 0 to rows
-	(loop named inner for task from 0 to columns
+     (loop for job from 0 to rows do
+	(loop named inner for task from 0 to columns do
 	  ;nao e' garantido que todos os jobs tenham o mesmo numero de tarefas
 	  (if (null (aref estado job task)) 
 	      (return-from inner)
@@ -164,8 +169,8 @@ J2: T0 0
   (let ((*nos-gerados* 0)
 	(*nos-expandidos* 0)
 	(tempo-inicio (get-internal-run-time))
-	;(objectivo? (problema-objectivo? problema))
-        (estado= (problema-estado= problema))
+	(objectivo? (problema-objectivo? problema))
+        ;(estado= (problema-estado= problema))
         (numMaxDiscrepancia 4)
         (result nil))
     
@@ -176,9 +181,9 @@ J2: T0 0
                          		((eq 0 num-elem) nil)
                          		(t 
                          			(setf result nil)
-                         			(if (rProfundidade > maxDiscrepancia)
+                         			(if (> rProfundidade maxDiscrepancia)
                          				(setf result (ildsProbe (car sucessores) maxDiscrepancia (- rProfundidade 1))))
-                         			(if (and (maxDiscrepancia > 0) (null result))
+                         			(if (and (> maxDiscrepancia 0) (null result))
                          				(dolist (suc (cdr sucessores))
                          					(setf result (ildsProbe suc (- maxDiscrepancia 1 ) (- rProfundidade 1)))
                          					(when (not (null result))
@@ -196,8 +201,8 @@ J2: T0 0
   (let* ((*nos-gerados* 0)
 	 (*nos-expandidos* 0)
 	 (tempo-inicio (get-internal-run-time))
-	 ;(objectivo? (problema-objectivo? problema))
-	 (estado= (problema-estado= problema))
+	 (objectivo? (problema-objectivo? problema))
+	 ;(estado= (problema-estado= problema))
 	 (solucao nil))
     
         (labels (#|(esta-no-caminho? (estado caminho)
