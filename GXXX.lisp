@@ -51,19 +51,15 @@
 		    (setf (aref estado-inicial job task-nr) job-task-wrapper)))))
 
 	 ;inicializacao de precedencias
-	 (loop for job from 1 to (- n.jobs 1) do
-	  (dotimes (task (job-shop-job-tasks (nth job jobs)))
-	    (let* ((job-w-constr (aref estado-inicial job task))
-		   (job-w-constr-before (aref estado-inicial job (- task 1)))
-		   (job-task-before (job-task-w-constr-job-task job-w-constr-before))
-		   (virtual-time-before (job-task-w-constr-virtual-time job-w-constr-before))
-		   (duration-before (job-shop-task-duration job-task-before))
-		   )
-	      (setf (job-task-w-constr-virtual-time job-w-constr) (+ virtual-time-before duration-before))
-	  
-	      )
-	    )
-	  )
+	 (loop for job from 0 to (- n.jobs 1) do
+	 	(loop for task from 1 to (- (list-length (job-shop-job-tasks (nth job jobs))) 1) do
+	  ;(dotimes (task 1 (list-length (job-shop-job-tasks (nth job jobs))))
+	    (let*  ((job-w-constr (aref estado-inicial job task))
+		   		(job-w-constr-before (aref estado-inicial job (- task 1)))
+		   		(job-task-before (job-task-w-constr-job-task job-w-constr-before))
+		   		(virtual-time-before (job-task-w-constr-virtual-time job-w-constr-before))
+		   		(duration-before (job-shop-task-duration job-task-before)))
+	      (setf (job-task-w-constr-virtual-time job-w-constr) (+ virtual-time-before duration-before)))))
 	 (cria-problema estado-inicial operadores)))
   
 
