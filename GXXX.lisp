@@ -6,9 +6,8 @@
 (defun calendarizacao (job-shop-problem procura-str) 
   (let ((internal-problema (converte-para-estado-interno job-shop-problem))
 		(result nil))
-
-    (cond ((equal procura-str "ILDS") (ilds internal-problema))
-	  	  ((equal procura-str "Iterative-Sampling") (sondagem-iterativa internal-problema))
+    (cond ((equal procura-str "ILDS") (return-from calendarizacao (ilds internal-problema)))
+	  	  ((equal procura-str "Iterative-Sampling") (return-from calendarizacao (sondagem-iterativa internal-problema)))
 	  	  (t
 	    	(procura internal-problema procura-str)))))
 
@@ -60,7 +59,7 @@
 		   		(virtual-time-before (job-task-w-constr-virtual-time job-w-constr-before))
 		   		(duration-before (job-shop-task-duration job-task-before)))
 	      (setf (job-task-w-constr-virtual-time job-w-constr) (+ virtual-time-before duration-before)))))
-	 (cria-problema estado-inicial operadores)))
+	 (cria-problema estado-inicial operadores :objectivo? #'estado-objectivo)))
   
 
 (defun proxima-tarefa (estado job)
@@ -172,9 +171,22 @@
   
   
 (defun optimize-schedule (job-problem)
+
+
   )
 
-
+(defun estado-objectivo (estado)
+	(let* ((dimensions (array-dimensions estado))
+		 	(rows (car dimensions))
+		 	(columns (cadr dimensions)))
+  		(loop for job from 0 to (- rows 1) do
+  			(if (loop for task from 0 to (- columns 1) thereis (null (job-shop-task-start.time (job-task-w-constr-job-task (aref estado job task)))))
+  					(return-from estado-objectivo nil)
+  				)
+  			)
+  		t
+  		)
+	)
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ; Struct aux functions
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -245,7 +257,6 @@
 	 (objectivo? (problema-objectivo? problema))
 	 ;(estado= (problema-estado= problema))
 	 (solucao nil))
-    
         (labels (#|(esta-no-caminho? (estado caminho)
                                    (member estado caminho :test estado=))|#
                  (lanca-sonda (estado)
@@ -257,6 +268,6 @@
                                        (if(equal num-elem 0)
                                            nil
                                          (lanca-sonda (nth (random num-elem) sucessores))))))))
-                 (unless (null solucao) 
+                 (loop while (null solucao) do
                    (setf solucao (lanca-sonda (problema-estado-inicial problema))))
                  (return-from sondagem-iterativa (list solucao)))))
