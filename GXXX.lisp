@@ -114,10 +114,11 @@
 			  (setf sucessores (cons novo-estado sucessores))))))
     sucessores))
 
-(defun propaga-restr-tempo-task (estado task-nr job-nr task-duration)
+(defun propaga-restr-tempo-task (estado task-nr job-nr last-start-time task-duration)
 	(let* ((dimensions (array-dimensions estado))
 		 	(rows (car dimensions))
-			(columns (cadr dimensions)))
+			(columns (cadr dimensions))
+			(virtual-time-inc (+ last-start-time task-duration)))
 		
 			(loop for task from (+ task-nr 1) to (- columns 1) do
 				(if (null (aref estado job-nr task))
@@ -131,7 +132,8 @@
 				  	   (virt-time (job-task-w-constr-virtual-time job-w-constr))
 				  	   (job-task-w-const-copia nil))
 
-					(setf job-task-w-const-copia (make-job-task-w-constr :job-task job-task-actual :virtual-time (+ virt-time task-duration)))
+						;(setf job-task-w-const-copia (make-job-task-w-constr :job-task job-task-actual :virtual-time (+ virt-time task-duration)))
+						(setf job-task-w-const-copia (make-job-task-w-constr :job-task job-task-actual :virtual-time (max virt-time virtual-time-inc)))
 			      		(setf (aref estado job-nr task) job-task-w-const-copia)))))	
 
 (defun propaga-restr-tempo-maquina (estado maquina job-nr last-start-time task-duration)
@@ -163,9 +165,10 @@
 
 				      (if (and (= maquina nr.maquina) (null start.time))
 				      	(progn
-				      		(setf job-task-w-const-copia (make-job-task-w-constr :job-task job-task-actual :virtual-time (+ virt-time virtual-time-inc)))
+				      		;(setf job-task-w-const-copia (make-job-task-w-constr :job-task job-task-actual :virtual-time (+ virt-time virtual-time-inc)))
+				      		(setf job-task-w-const-copia (make-job-task-w-constr :job-task job-task-actual :virtual-time (max virt-time virtual-time-inc)))
 				      		(setf (aref estado job task) job-task-w-const-copia)
-				      		(propaga-restr-tempo-task estado task job task-duration))))))))))
+				      		(propaga-restr-tempo-task estado task job last-start-time task-duration))))))))))
 
 
   
