@@ -5,14 +5,12 @@
 
 (defun calendarizacao (job-shop-problem procura-str) 
   (let ((internal-problema (converte-para-estado-interno job-shop-problem))
-	(result nil))
+		(result nil))
+
     (cond ((equal procura-str "ILDS") (ilds internal-problema))
-	  ((equal procura-str "Iterative-Sampling") (sondagem-iterativa internal-problema))
-	  (t
-	    (procura internal-problema procura-str))
-	    )
-    )
-  )
+	  	  ((equal procura-str "Iterative-Sampling") (sondagem-iterativa internal-problema))
+	  	  (t
+	    	(procura internal-problema procura-str)))))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -21,63 +19,51 @@
 
 (defstruct job-schedule 
   job-shop-problem
-  best-schedule
-  )
+  best-schedule)
 
  ;Used to propagate time constraint from task precendence and machine precendence
 (defstruct job-task-w-constr
   job-task
-  virtual-time
-  )
+  virtual-time)
   
 (defun converte-para-visualizacao (estado-interno)
   ) 
 
-;FIXME
 (defun converte-para-estado-interno (job-shop-prob) 
   (let ((operadores (list #'inicia-task))
-	(n.jobs (job-shop-problem-n.jobs job-shop-prob))
-	(estado-inicial nil)
-	(max-num-tasks 0)
-	(jobs (job-shop-problem-jobs job-shop-prob))
-	)
-	(loop for job from 0 to n.jobs do
-	  (if (> (list-length (nth job jobs)) max-num-tasks)
-	      (setf max-num-tasks  (list-length (nth job jobs)))
-	      )
-	  )
+		(n.jobs (job-shop-problem-n.jobs job-shop-prob))
+		(estado-inicial nil)
+		(max-num-tasks 0)
+		(jobs (job-shop-problem-jobs job-shop-prob)))
+
+	(dotimes (job n.jobs)
+	  (if (> (list-length (job-shop-job-tasks (nth job jobs))) max-num-tasks)
+	      	(setf max-num-tasks (list-length (job-shop-job-tasks (nth job jobs))))))
+
 	(setf estado-inicial (make-array (list n.jobs max-num-tasks)))
 	(dotimes (job n.jobs)
-	  (let* ((job-tasks (job-shop-job-tasks (nth job jobs)))
-		)
+	  (let* ((job-tasks (job-shop-job-tasks (nth job jobs))))
+
 	    (dolist (task job-tasks)
-	      (let* ((job-task-wrapper (make-job-task-w-constr task 0))
-		      (task-nr (job-shop-task-task.nr task))
-		      )
-		    (setf (aref estado-inicial job task-nr) job-task-wrapper)
-	    
-		    )
-	      )
-	    )
-	   )
+	      (let* ((job-task-wrapper (make-job-task-w-constr :job-task (copy-job-shop-task task) :virtual-time 0))
+		      	 (task-nr (job-shop-task-task.nr task)))
+
+		    (setf (aref estado-inicial job task-nr) job-task-wrapper)))))
+
     ;outros com precedencias
-    (cria-problema estado-inicial operadores)
-    )
-  )
+    ;FIXME - precedencias
+    (cria-problema estado-inicial operadores)))
   
 
 (defun proxima-tarefa (estado job)
   (let* ((dimensions (array-dimensions estado))
-	(columns (car dimensions))
-	)
-    (loop for task from 0 to columns do 
+		 (columns (car dimensions)))
+
+    (loop for task from 0 to (- columns 1) do 
       (if (null (job-shop-task-start.time (job-task-w-constr-job-task (aref estado job task))))
-	  (return-from proxima-tarefa task)
-	 )
-      )
-    (return-from proxima-tarefa nil)	  	
-    )
-  )
+	  	(return-from proxima-tarefa task)))
+
+    (return-from proxima-tarefa nil)))
   
  
 ;operador
@@ -85,72 +71,98 @@
 ;estado interno e' um array de job-task-w-constr
 (defun inicia-task (estado)
   (let* ((sucessores '())
-	       (dimensions (array-dimensions estado))
-	       (columns (car dimensions))
-	       (rows (cdr dimensions)));numero de jobs igual ao numero de linhas
-    (loop for job from 0 to rows do
+       	 (dimensions (array-dimensions estado))
+       	 (columns (car dimensions))
+       	 (rows (cadr dimensions))) ;numero de jobs igual ao numero de linhas
+
+    (loop for job from 0 to (- rows 1) do
       (let* ((prox-task (proxima-tarefa estado job))
-	    (novo-estado nil)
-	    (job-task nil)
-	    (nr.maquina nil)
-	    (last-start-time nil)
-	    (task-duration nil)
-	    )
-	    (if (not(null prox-task))
-		(progn
-		  ;novo-estado sucessor 
-		  (setf novo-estado (copy-array estado))
-		  ;o job-shop-task
-		  (setf job-task (job-task-w-constr-job-task (aref estado job prox-task)))
-		  ;o numero da maquina
-		  (setf nr.maquina (job-shop-task-machine.nr job-task))
-		  ;actualizar o tempo de inicio do job 
-		  (setf (job-shop-task-start.time job-task) (job-task-w-constr-virtual-time (aref estado job prox-task)))
-		  (setf last-start-time (job-shop-task-start.time job-task))
-		  (setf task-duration (job-shop-task-duration job-task))
-		  (propaga-restr-tempo novo-estado nr.maquina last-start-time task-duration)
-		  )
-		 )
-	  )
-	)
-      )
-  )  
+	    	 (novo-estado nil)
+	   	 	 (job-task nil)
+	    	 (nr.maquina nil)
+	    	 (last-start-time nil)
+	    	 (task-duration nil)
+	    	 (copia-task nil))
+
+	    (if (not (null prox-task))
+			(progn
+
+			  ;novo-estado sucessor 
+			  (setf novo-estado (copy-array estado))
+
+			  ;o job-shop-task
+			  (setf job-task (job-task-w-constr-job-task (aref estado job prox-task)))
+			  (setf copia-task (copy-job-shop-task job-task))
+
+			  ;o numero da maquina
+			  (setf nr.maquina (job-shop-task-machine.nr job-task))
+			  
+			  ;actualizar o tempo de inicio do job 
+			  (setf (job-shop-task-start.time copia-task) (job-task-w-constr-virtual-time (aref estado job prox-task)))
+			  (setf last-start-time (job-shop-task-start.time copia-task))
+			  (setf task-duration (job-shop-task-duration job-task))
+			  (setf (aref novo-estado job prox-task) (make-job-task-w-constr :job-task copia-task :virtual-time 0))
+			  (propaga-restr-tempo novo-estado nr.maquina last-start-time task-duration)
+			  (setf sucessores (cons novo-estado sucessores))))))
+    sucessores))
+
+
 
 (defun propaga-restr-tempo (estado maquina last-start-time task-duration)
   (let* ((virtual-time-inc (+ last-start-time task-duration))
-	(dimensions (array-dimensions estado))
-	(columns (car dimensions))
-	(rows (cdr dimensions))
-	)
+		 (dimensions (array-dimensions estado))
+		 (columns (car dimensions))
+		 (rows (cadr dimensions)))
+
      ;para cada maquina que ainda nao tenha start time, propaga o tempo virtual, actualizando o anterior
-     (loop for job from 0 to rows do
-	(loop named inner for task from 0 to columns do
-	  ;nao e' garantido que todos os jobs tenham o mesmo numero de tarefas
-	  (if (null (aref estado job task)) 
-	      (return-from inner)
-	    ;Caso exista
-	    (let* ((job-task-actual (job-task-w-constr-job-task (aref estado job task)))
-		  (nr.maquina (job-shop-task-machine.nr job-task-actual))
-		  ;(duration (job-shop-task-duration job-task-actual))
-		  (start.time (job-shop-task-start.time job-task-actual))
-		  (virt-time (job-task-w-constr-virtual-time (aref estado job task)))
-		  )
-	      ;caso seja a maquina escolhida no operador que gera os sucessores e nao tenha sido ainda escolhida,
-	      ;actualiza o valor virtual de inicio
-	      (if (and (= maquina nr.maquina) (null start.time))
-		  (setf (job-task-w-constr-virtual-time (aref estado job task)) (+ virt-time virtual-time-inc))
-		  )
-	     )
-	    )
-	  )
-	)  
-      )
-  )  
+     (loop for job from 0 to (- rows 1) do
+		(loop named inner for task from 0 to (- columns 1) do
+
+	  		;nao e' garantido que todos os jobs tenham o mesmo numero de tarefas
+	  		(if (null (aref estado job task)) 
+	      		(return-from inner)
+
+			    ;Caso exista
+			    (let* ((job-w-constr (aref estado job task))
+			    	   (job-task-actual (copy-job-shop-task (job-task-w-constr-job-task (aref estado job task))))
+				  	   (nr.maquina (job-shop-task-machine.nr job-task-actual))
+				  	   ;(duration (job-shop-task-duration job-task-actual))
+				  	   (start.time (job-shop-task-start.time job-task-actual))
+				  	   (virt-time (job-task-w-constr-virtual-time job-w-constr))
+				  	   (job-task-w-const-copia nil))
+
+			      ;caso seja a maquina escolhida no operador que gera os sucessores e nao tenha sido ainda escolhida,
+			      ;actualiza o valor virtual de inicio
+			      (if (and (= maquina nr.maquina) (null start.time))
+			      	(progn
+			      		(setf job-task-w-const-copia (make-job-task-w-constr :job-task job-task-actual :virtual-time (+ virt-time virtual-time-inc)))
+				  		(setf (aref estado job task) job-task-w-const-copia)))))))))
+
+
   
   
 (defun optimize-schedule (job-problem)
   )
 
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; Struct aux functions
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(defun copy-job-shop-job (job)
+	(let ((copia (make-job-shop-job :job.nr (job-shop-job-job.nr job)
+									:tasks '()))
+		  (tasks (job-shop-job-tasks job)))
+		(setf (job-shop-job-tasks copia) (copy-list tasks))
+		copia))
+
+(defun copy-job-shop-task (task)
+	(let ((copia (make-job-shop-task :job.nr (job-shop-task-job.nr task)
+   									 :task.nr (job-shop-task-task.nr task)
+   								 	 :machine.nr (job-shop-task-machine.nr task)
+   								 	 :duration (job-shop-task-duration task)
+   								 	 :start.time (job-shop-task-start.time task))))
+		copia))
 
 
 
