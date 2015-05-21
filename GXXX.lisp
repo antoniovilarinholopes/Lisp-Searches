@@ -65,7 +65,7 @@
 
 (defun proxima-tarefa (estado job)
   (let* ((dimensions (array-dimensions estado))
-		 (columns (car dimensions)))
+		 (columns (cadr dimensions)))
 
     (loop for task from 0 to (- columns 1) do 
       (if (null (job-shop-task-start.time (job-task-w-constr-job-task (aref estado job task))))
@@ -80,8 +80,8 @@
 (defun inicia-task (estado)
   (let* ((sucessores '())
        	 (dimensions (array-dimensions estado))
-       	 (columns (car dimensions))
-       	 (rows (cadr dimensions))) ;numero de jobs igual ao numero de linhas
+       	 (rows (car dimensions))
+       	 (columns (cadr dimensions))) ;numero de jobs igual ao numero de linhas
 
     (loop for job from 0 to (- rows 1) do
       (let* ((prox-task (proxima-tarefa estado job))
@@ -104,47 +104,69 @@
 
 			  ;o numero da maquina
 			  (setf nr.maquina (job-shop-task-machine.nr job-task))
-			  
+
 			  ;actualizar o tempo de inicio do job 
 			  (setf (job-shop-task-start.time copia-task) (job-task-w-constr-virtual-time (aref estado job prox-task)))
 			  (setf last-start-time (job-shop-task-start.time copia-task))
 			  (setf task-duration (job-shop-task-duration job-task))
 			  (setf (aref novo-estado job prox-task) (make-job-task-w-constr :job-task copia-task :virtual-time 0))
-			  (propaga-restr-tempo novo-estado nr.maquina last-start-time task-duration)
+			  ;(propaga-restr-tempo-task novo-estado prox-task job last-start-time)
+			  (propaga-restr-tempo-maquina novo-estado nr.maquina job last-start-time task-duration)
 			  (setf sucessores (cons novo-estado sucessores))))))
     sucessores))
 
+(defun propaga-restr-tempo-task (estado task-nr job-nr task-duration)
+	(let* ((dimensions (array-dimensions estado))
+		 	(rows (car dimensions))
+			(columns (cadr dimensions)))
+		
+			(loop for task from (+ task-nr 1) to (- columns 1) do
+				(if (null (aref estado job-nr task))
+					(return-from propaga-restr-tempo-task))
 
-
-(defun propaga-restr-tempo (estado maquina last-start-time task-duration)
-  (let* ((virtual-time-inc (+ last-start-time task-duration))
-		 (dimensions (array-dimensions estado))
-		 (columns (car dimensions))
-		 (rows (cadr dimensions)))
-
-     ;para cada maquina que ainda nao tenha start time, propaga o tempo virtual, actualizando o anterior
-     (loop for job from 0 to (- rows 1) do
-		(loop named inner for task from 0 to (- columns 1) do
-
-	  		;nao e' garantido que todos os jobs tenham o mesmo numero de tarefas
-	  		(if (null (aref estado job task)) 
-	      		(return-from inner)
-
-			    ;Caso exista
-			    (let* ((job-w-constr (aref estado job task))
-			    	   (job-task-actual (copy-job-shop-task (job-task-w-constr-job-task (aref estado job task))))
+				(let* ((job-w-constr (aref estado job-nr task))
+			    	   (job-task-actual (copy-job-shop-task (job-task-w-constr-job-task (aref estado job-nr task))))
 				  	   (nr.maquina (job-shop-task-machine.nr job-task-actual))
 				  	   ;(duration (job-shop-task-duration job-task-actual))
 				  	   (start.time (job-shop-task-start.time job-task-actual))
 				  	   (virt-time (job-task-w-constr-virtual-time job-w-constr))
 				  	   (job-task-w-const-copia nil))
 
-			      ;caso seja a maquina escolhida no operador que gera os sucessores e nao tenha sido ainda escolhida,
-			      ;actualiza o valor virtual de inicio
-			      (if (and (= maquina nr.maquina) (null start.time))
-			      	(progn
-			      		(setf job-task-w-const-copia (make-job-task-w-constr :job-task job-task-actual :virtual-time (+ virt-time virtual-time-inc)))
-				  		(setf (aref estado job task) job-task-w-const-copia)))))))))
+					(setf job-task-w-const-copia (make-job-task-w-constr :job-task job-task-actual :virtual-time (+ virt-time task-duration)))
+			      		(setf (aref estado job-nr task) job-task-w-const-copia)))))	
+
+(defun propaga-restr-tempo-maquina (estado maquina job-nr last-start-time task-duration)
+  (let* ((virtual-time-inc (+ last-start-time task-duration))
+		 (dimensions (array-dimensions estado))
+		 (rows (car dimensions))
+		 (columns (cadr dimensions)))
+
+     ;para cada maquina que ainda nao tenha start time, propaga o tempo virtual, actualizando o anterior
+     (loop for job from 0 to (- rows 1) do
+     	(if (not (= job job-nr))
+			(loop named inner for task from 0 to (- columns 1) do
+
+		  		;nao e' garantido que todos os jobs tenham o mesmo numero de tarefas
+		  		(if (null (aref estado job task)) 
+		      		(return-from inner)
+
+				    ;Caso exista
+				    (let* ((job-w-constr (aref estado job task))
+				    	   (job-task-actual (copy-job-shop-task (job-task-w-constr-job-task (aref estado job task))))
+					  	   (nr.maquina (job-shop-task-machine.nr job-task-actual))
+					  	   ;(duration (job-shop-task-duration job-task-actual))
+					  	   (start.time (job-shop-task-start.time job-task-actual))
+					  	   (virt-time (job-task-w-constr-virtual-time job-w-constr))
+					  	   (job-task-w-const-copia nil))
+
+				      ;caso seja a maquina escolhida no operador que gera os sucessores e nao tenha sido ainda escolhida,
+				      ;actualiza o valor virtual de inicio
+
+				      (if (and (= maquina nr.maquina) (null start.time))
+				      	(progn
+				      		(setf job-task-w-const-copia (make-job-task-w-constr :job-task job-task-actual :virtual-time (+ virt-time virtual-time-inc)))
+				      		(setf (aref estado job task) job-task-w-const-copia)
+				      		(propaga-restr-tempo-task estado task job task-duration))))))))))
 
 
   
