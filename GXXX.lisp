@@ -1,15 +1,17 @@
 (in-package :user)
 (load (compile-file "procura.lisp"))
 (load (compile-file "job-shop-problemas-modelos.lisp"))
+(load (compile-file "job-shop-problemas-v1.lisp"))
 
 
 (defun calendarizacao (job-shop-problem procura-str) 
   (let ((internal-problema (converte-para-estado-interno job-shop-problem))
 		(result nil))
-    (cond ((equal procura-str "ILDS") (return-from calendarizacao (ilds internal-problema)))
-	  	  ((equal procura-str "Iterative-Sampling") (return-from calendarizacao (sondagem-iterativa internal-problema)))
+    (cond ((string-equal procura-str "ILDS") (setf result (ilds internal-problema 100)))
+	  	  ((string-equal procura-str "Iterative-Sampling") (setf result (sondagem-iterativa internal-problema)))
 	  	  (t
-	    	(procura internal-problema procura-str)))))
+	    	(setf result (procura internal-problema procura-str))))
+    result))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -25,6 +27,16 @@
   job-task
   virtual-time)
   
+(defstruct state-job-schedule
+	machine-times
+	non-allocated-tasks
+	allocated-tasks
+	jobs-tasks-space)
+
+(defstruct task-info
+	task-id
+	task-duration)
+
 (defun converte-para-visualizacao (estado-interno)
   ) 
 
@@ -50,16 +62,16 @@
 		    (setf (aref estado-inicial job task-nr) job-task-wrapper)))))
 
 	 ;inicializacao de precedencias
-	 (loop for job from 0 to (- n.jobs 1) do
+	(loop for job from 0 to (- n.jobs 1) do
 	 	(loop for task from 1 to (- (list-length (job-shop-job-tasks (nth job jobs))) 1) do
-	  ;(dotimes (task 1 (list-length (job-shop-job-tasks (nth job jobs))))
-	    (let*  ((job-w-constr (aref estado-inicial job task))
-		   		(job-w-constr-before (aref estado-inicial job (- task 1)))
-		   		(job-task-before (job-task-w-constr-job-task job-w-constr-before))
-		   		(virtual-time-before (job-task-w-constr-virtual-time job-w-constr-before))
-		   		(duration-before (job-shop-task-duration job-task-before)))
-	      (setf (job-task-w-constr-virtual-time job-w-constr) (+ virtual-time-before duration-before)))))
-	 (cria-problema estado-inicial operadores :objectivo? #'estado-objectivo)))
+		    (let*  ((job-w-constr (aref estado-inicial job task))
+			   		(job-w-constr-before (aref estado-inicial job (- task 1)))
+			   		(job-task-before (job-task-w-constr-job-task job-w-constr-before))
+			   		(virtual-time-before (job-task-w-constr-virtual-time job-w-constr-before))
+			   		(duration-before (job-shop-task-duration job-task-before)))
+	      		(setf (job-task-w-constr-virtual-time job-w-constr) (+ virtual-time-before duration-before)))))
+
+	(cria-problema estado-inicial operadores :objectivo? #'estado-objectivo)))
   
 
 (defun proxima-tarefa (estado job)
@@ -73,14 +85,14 @@
     (return-from proxima-tarefa nil)))
   
  
-;operador
+;operador para gerar sucessores
 ;operador assume que as tasks estao ordenadas por ordem crescente
 ;estado interno e' um array de job-task-w-constr
 (defun inicia-task (estado)
   (let* ((sucessores '())
        	 (dimensions (array-dimensions estado))
-       	 (rows (car dimensions))
-       	 (columns (cadr dimensions))) ;numero de jobs igual ao numero de linhas
+       	 (rows (car dimensions)) ;numero de jobs igual ao numero de linhas
+       	 (columns (cadr dimensions))) 
 
     (loop for job from 0 to (- rows 1) do
       (let* ((prox-task (proxima-tarefa estado job))
@@ -184,12 +196,11 @@
 		 	(columns (cadr dimensions)))
   		(loop for job from 0 to (- rows 1) do
   			(if (loop for task from 0 to (- columns 1) thereis (null (job-shop-task-start.time (job-task-w-constr-job-task (aref estado job task)))))
-  					(return-from estado-objectivo nil)
-  				)
-  			)
-  		t
-  		)
-	)
+  					(return-from estado-objectivo nil)))
+  		t))
+
+
+; ideia para heuristica (NaoAlocadas / (NMaquinas * TotalTarefas)) *(MaximoTempoMaquinas + SumDurationNonAllocated)
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ; Struct aux functions
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -221,56 +232,56 @@
 ;;;;;;;;;;;;;
 ;Ref para ilds pseudo-codigo
 ;http://delivery.acm.org/10.1145/2020000/2019581/a1_6-prosser.pdf?ip=194.210.231.19&id=2019581&acc=ACTIVE%20SERVICE&key=2E5699D25B4FE09E%2EF7A57B2C5B227641%2E4D4702B0C3E38B35%2E4D4702B0C3E38B35&CFID=675816888&CFTOKEN=37766688&__acm__=1432052157_b9aa95a702e113482df3bdaed4e3b506
-(defun ilds (problema) 
+(defun ilds (problema maxDepth) 
   (let ((*nos-gerados* 0)
-	(*nos-expandidos* 0)
-	(tempo-inicio (get-internal-run-time))
-	(objectivo? (problema-objectivo? problema))
+		(*nos-expandidos* 0)
+		(tempo-inicio (get-internal-run-time))
+		(objectivo? (problema-objectivo? problema))
         ;(estado= (problema-estado= problema))
-        (numMaxDiscrepancia 4)
+        (numMaxDiscrepancia maxDepth)
         (result nil))
     
-        (labels ((ildsProbe (estado maxDiscrepancia rProfundidade)
-                    (let* ((sucessores (problema-gera-sucessores problema estado))
-                           (num-elem (length sucessores)))
-                         (cond 	((funcall objectivo? estado) (list estado))
-                         		((eq 0 num-elem) nil)
-                         		(t 
-                         			(setf result nil)
-                         			(if (> rProfundidade maxDiscrepancia)
-                         				(setf result (ildsProbe (car sucessores) maxDiscrepancia (- rProfundidade 1))))
-                         			(if (and (> maxDiscrepancia 0) (null result))
-                         				(dolist (suc (cdr sucessores))
-                         					(setf result (ildsProbe suc (- maxDiscrepancia 1 ) (- rProfundidade 1)))
-                         					(when (not (null result))
-                         					 	(return-from ildsProbe (list result)))))
-                     				(return-from ildsProbe (list result)))))))
-				(dotimes (maxDiscrepancia numMaxDiscrepancia)
-					(setf result (ildsProbe (problema-estado-inicial problema) maxDiscrepancia (- numMaxDiscrepancia maxDiscrepancia)))
-					(when (not (null result))
-						(return-from ilds result))))))
+    (labels ((ildsProbe (estado maxDiscrepancia rProfundidade)
+                (let* ((sucessores (problema-gera-sucessores problema estado))
+                       (num-elem (list-length sucessores)))
+                     (cond 	((funcall objectivo? estado) (list estado))
+                     		((= 0 num-elem) nil)
+                     		(t 
+                     			(setf result nil)
+                     			(if (> rProfundidade maxDiscrepancia)
+                     				(setf result (ildsProbe (car sucessores) maxDiscrepancia (- rProfundidade 1))))
+                     			(if (and (> maxDiscrepancia 0) (null result))
+                     				(dolist (suc (cdr sucessores))
+                     					(setf result (ildsProbe suc (- maxDiscrepancia 1 ) (- rProfundidade 1)))
+                     					(print result)
+                     					(when (not (null result))
+                     					 	(return-from ildsProbe (list result)))))
+                 				(return-from ildsProbe (list result)))))))
+			(loop for maxDiscrepancia from 0 to numMaxDiscrepancia do
+				(setf result (ildsProbe (problema-estado-inicial problema) maxDiscrepancia (- numMaxDiscrepancia maxDiscrepancia)))
+				(when (not (null result))
+					(return-from ilds result))))))
 
 ;;;;;;;;;;;;;;;;;;;;;
 ;Iterative-Sampling
 ;;;;;;;;;;;;;;;;;;;;;
 (defun sondagem-iterativa (problema) 
   (let* ((*nos-gerados* 0)
-	 (*nos-expandidos* 0)
-	 (tempo-inicio (get-internal-run-time))
-	 (objectivo? (problema-objectivo? problema))
-	 ;(estado= (problema-estado= problema))
-	 (solucao nil))
-        (labels (#|(esta-no-caminho? (estado caminho)
-                                   (member estado caminho :test estado=))|#
-                 (lanca-sonda (estado)
-                              (cond ((funcall objectivo? estado) (list estado))
-                                    ((null estado) nil)
-                                    (t 
-                                     (let* ((sucessores (problema-gera-sucessores problema estado))
-                                            (num-elem (length sucessores)))
-                                       (if(equal num-elem 0)
-                                           nil
-                                         (lanca-sonda (nth (random num-elem) sucessores))))))))
-                 (loop while (null solucao) do
-                   (setf solucao (lanca-sonda (problema-estado-inicial problema))))
-                 (return-from sondagem-iterativa (list solucao)))))
+		 (*nos-expandidos* 0)
+		 (tempo-inicio (get-internal-run-time))
+		 (objectivo? (problema-objectivo? problema))
+		 ;(estado= (problema-estado= problema))
+		 (solucao nil))
+
+    (labels ((lanca-sonda (estado)
+              (cond ((funcall objectivo? estado) (list estado))
+                    ((null estado) nil)
+                    (t 
+                     (let* ((sucessores (problema-gera-sucessores problema estado))
+                            (num-elem (length sucessores)))
+                       (if(equal num-elem 0)
+                           nil
+                         (lanca-sonda (nth (random num-elem) sucessores))))))))
+             (loop while (null solucao) do
+               (setf solucao (lanca-sonda (problema-estado-inicial problema))))
+             (return-from sondagem-iterativa (list solucao)))))
