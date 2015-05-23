@@ -310,16 +310,15 @@
 ;;;;;;;;;;;;;;;
 ; Beam Search
 ;;;;;;;;;;;;;;;
-
-
-;thanks to Norvig
+;http://norvig.com/paip/search.lisp
+;thanks to Mr. Norvig
 (defun sorter (heur)
   "Return a combiner function that sorts according to heuristic."
   #'(lambda (new old)
       (let* ((all-states (append new old)))
 	(stable-sort all-states #'< :key heur))))
 
-;Also thanks to Norvig
+;Also thanks to Mr.Norvig
 (defun beam-sorter (beam-width heur)
        #'(lambda (old new)
 	  (let ((sorted (funcall (sorter heur) old new)))
@@ -328,8 +327,11 @@
 		(subseq sorted 0 beam-width))))
  		)
 
-		
-(defun beam-search (problema beam-width) 
+(defun is-better-solution (heur)
+      #'(lambda (best-solution-so-far new-solution)
+	    (> (funcall heur (first new-solution)) (funcall heur (first best-solution-so-far)))))
+	    
+(defun beam-search (problema beam-width max-beam-width) 
   (let* ((*nos-gerados* 0)
 		 (*nos-expandidos* 0)
 		 (tempo-inicio (get-internal-run-time))
@@ -337,12 +339,12 @@
 		 (heur (problema-heuristica problema))
 		 ;(estado= (problema-estado= problema))
 
-		 (solucao nil)
+		 (result nil)
 		 (tempo 300))
 
     (labels ((beam (estados)
-              (cond ((<= (- tempo (/ (- (get-internal-run-time) tempo-inicio) internal-time-units-per-second)) 0.2) (return-from beam-search solucao))
-				    ((funcall objectivo? (first estados)) (list (first estados)))
+              (cond ((<= (- tempo (/ (- (get-internal-run-time) tempo-inicio) internal-time-units-per-second)) 0.2) (return-from beam-search result))
+		    ((funcall objectivo? (first estados)) (list (first estados)))
                     ((null (first estados)) nil)
                     (t 
                      (let* ((sucessores-estado (problema-gera-sucessores problema (first estados)))
@@ -350,14 +352,17 @@
                             )
 			  (return-from beam (beam sucessores-ordenados)))))))
              (loop 
-				(let* ((aux-solucao nil))
-				  (setf aux-solucao (beam (list (problema-estado-inicial problema))))
-				  (if (null solucao)
-				      (setf solucao aux-solucao)
-				     (if (better-solution aux-solucao solucao)
-					 	(setf solucao aux-solucao)))
+				(let* ((aux-result nil))
+				  (setf aux-result (beam (list (problema-estado-inicial problema))))
+				  (if (null result)
+				      (setf result aux-result)
+				     (if (funcall (is-better-solution heur) aux-result result)
+					 	(setf result aux-result)))
+				  (if (< beam-width max-beam-width)
+					(incf beam-width)
+				      (return-from beam-search result))
 				  (when (<= (- tempo (/ (- (get-internal-run-time) tempo-inicio) internal-time-units-per-second)) 0.2)
-				      (return-from beam-search solucao)))))))
+				      (return-from beam-search result)))))))
 
 ;;;;;;;;;;;;;
 ;ILDS
@@ -402,7 +407,7 @@
 		 (tempo-inicio (get-internal-run-time))
 		 (objectivo? (problema-objectivo? problema))
 		 ;(estado= (problema-estado= problema))
-		 (solucao nil))
+		 (result nil))
 
     (labels ((lanca-sonda (estado)
               (cond ((funcall objectivo? estado) (list estado))
@@ -413,6 +418,6 @@
                        (if(equal num-elem 0)
                            nil
                          (lanca-sonda (nth (random num-elem) sucessores))))))))
-             (loop while (null solucao) do
-               (setf solucao (lanca-sonda (problema-estado-inicial problema))))
+             (loop while (null result) do
+               (setf result (lanca-sonda (problema-estado-inicial problema))))
              (return-from sondagem-iterativa solucao))))
