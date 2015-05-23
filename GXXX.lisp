@@ -13,7 +13,8 @@
 	  	  (t
 	    	(setf result (procura internal-problema procura-str))))
     (if (not (null result))
-    	(converte-para-visualizacao (car result))
+    	(car result)
+    	;(converte-para-visualizacao (car result))
     	nil)))
 
 
@@ -95,7 +96,7 @@
 											 :number-tasks n-total-tasks
 											 :jobs-tasks-space estado-inicial))
 
-	(cria-problema state-job operadores :objectivo? #'estado-objectivo :heuristica #'heuristica-tempo-desperdicado)))
+	(cria-problema state-job operadores :objectivo? #'estado-objectivo :heuristica #'heuristica-tempo-desperdicado :custo #'maquina-gastou-mais-tempo)))
   
 
 (defun proxima-tarefa (estado job)
@@ -259,7 +260,7 @@
 		   (heuristica-value 0))
 
 		;calcular duracao das tarefas que faltam realizar
-		(dolist (task n-tarefas-nao-alocadas)
+		(dolist (task tarefas-nao-alocadas)
 			(setf remaining-task-durations (+ remaining-task-durations (task-info-task-duration task))))
 
 		;determinar qual o tempo de funcionamento maximo de uma maquina ate agora
@@ -272,6 +273,15 @@
 		(setf heuristica-value (* (/ n-tarefas-nao-alocadas (* n-maquinas total-number-tasks)) (+ max-time-machine remaining-task-durations)))
 		heuristica-value))
 
+(defun maquina-gastou-mais-tempo (estado)
+	(let* ((tempos-maquinas (state-job-schedule-machine-times estado))
+		   (n-maquinas (car (array-dimensions tempos-maquinas)))
+		   (max-time-machine 0))
+		(dotimes (nr-maquina n-maquinas)
+			(let ((tempo-actual (aref tempos-maquinas nr-maquina)))
+				(if (and (not (null tempo-actual)) (> tempo-actual max-time-machine))
+					(setf max-time-machine tempo-actual))))
+		max-time-machine))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ; Struct aux functions
