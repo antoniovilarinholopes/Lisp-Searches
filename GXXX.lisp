@@ -316,9 +316,19 @@
 (defun sorter (heur)
   "Return a combiner function that sorts according to heuristic."
   #'(lambda (new old)
-      (sort (append new old) #'< :key heur)))
+      (let* ((all-states (append new old)))
+	(stable-sort all-states #'< :key heur))))
 
+;Also thanks to Norvig
+(defun beam-sorter (beam-width heur)
+       #'(lambda (old new)
+	  (let ((sorted (funcall (sorter heur) old new)))
+	    (if (> beam-width (length sorted))
+		  sorted
+		(subseq sorted 0 beam-width))))
+ 		)
 
+		
 (defun beam-search (problema beam-width) 
   (let* ((*nos-gerados* 0)
 		 (*nos-expandidos* 0)
@@ -327,24 +337,18 @@
 		 (heur (problema-heuristica problema))
 		 ;(estado= (problema-estado= problema))
 
-		 ;thanks to Norvig
-		 (beam-sorter #'(lambda (old new)
-				 (let ((sorted (funcall (sorter heur) old new)))
-				   (if (> beam-width (length sorted))
-						sorted
-				      (subseq sorted 0 beam-width)))))
 		 (solucao nil)
 		 (tempo 300))
 
     (labels ((beam (estados)
-              (cond ((<= (- tempo (/ (- (get-internal-real-time) tempo-inicio) internal-time-units-per-second)) 0.2) (return-from beam-search solucao))
+              (cond ((<= (- tempo (/ (- (get-internal-run-time) tempo-inicio) internal-time-units-per-second)) 0.2) (return-from beam-search solucao))
 				    ((funcall objectivo? (first estados)) (list (first estados)))
                     ((null (first estados)) nil)
                     (t 
                      (let* ((sucessores-estado (problema-gera-sucessores problema (first estados)))
-                            (sucessores-ordenados (funcall beam-sorter sucessores-estado (rest estados)));sucessores ate' beam width
+                            (sucessores-ordenados (funcall (beam-sorter beam-width heur) sucessores-estado (rest estados)));sucessores ate' beam width
                             )
-						(return-from beam (beam sucessores-ordenados)))))))
+			  (return-from beam (beam sucessores-ordenados)))))))
              (loop 
 				(let* ((aux-solucao nil))
 				  (setf aux-solucao (beam (list (problema-estado-inicial problema))))
@@ -352,7 +356,7 @@
 				      (setf solucao aux-solucao)
 				     (if (better-solution aux-solucao solucao)
 					 	(setf solucao aux-solucao)))
-				  (when (<= (- tempo (/ (- (get-internal-real-time) tempo-inicio) internal-time-units-per-second)) 0.2)
+				  (when (<= (- tempo (/ (- (get-internal-run-time) tempo-inicio) internal-time-units-per-second)) 0.2)
 				      (return-from beam-search solucao)))))))
 
 ;;;;;;;;;;;;;
