@@ -356,7 +356,7 @@
 				  (setf aux-result (beam (list (problema-estado-inicial problema))))
 				  (if (null result)
 				      (setf result aux-result)
-				     (if (funcall (is-better-solution heur) aux-result result)
+				     (if (funcall (is-better-solution heur) result aux-result)
 					 	(setf result aux-result)))
 				  (if (< beam-width max-beam-width)
 					(incf beam-width)
