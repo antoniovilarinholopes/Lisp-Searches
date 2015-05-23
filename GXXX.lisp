@@ -9,9 +9,12 @@
 		(result nil))
     (cond ((string-equal procura-str "ILDS") (setf result (ilds internal-problema 100)))
 	  	  ((string-equal procura-str "Iterative-Sampling") (setf result (sondagem-iterativa internal-problema)))
+	  	  ((string-equal procura-str "Local-Beam") (setf result (beam-search internal-problema 10)))
 	  	  (t
 	    	(setf result (procura internal-problema procura-str))))
-    (converte-para-visualizacao (car result))))
+    (if (not (null result))
+    	(converte-para-visualizacao (car result))
+    	nil)))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -92,7 +95,7 @@
 											 :number-tasks n-total-tasks
 											 :jobs-tasks-space estado-inicial))
 
-	(cria-problema state-job operadores :objectivo? #'estado-objectivo)))
+	(cria-problema state-job operadores :objectivo? #'estado-objectivo :heuristica #'heuristica-tempo-desperdicado)))
   
 
 (defun proxima-tarefa (estado job)
@@ -114,7 +117,6 @@
        	 (estado (state-job-schedule-jobs-tasks-space state-job))
        	 (dimensions (array-dimensions estado))
        	 (rows (car dimensions)) ;numero de jobs igual ao numero de linhas
-       	 (columns (cadr dimensions))
        	 (tempos-maquinas (state-job-schedule-machine-times state-job))
        	 (tarefas-a-atribuir (state-job-schedule-non-allocated-tasks state-job))) 
 
@@ -176,7 +178,7 @@
 
 (defun propaga-restr-tempo-task (estado task-nr job-nr last-start-time task-duration)
 	(let* ((dimensions (array-dimensions estado))
-		 	(rows (car dimensions))
+		 	;(rows (car dimensions))
 			(columns (cadr dimensions))
 			(virtual-time-inc (+ last-start-time task-duration)))
 		
@@ -186,9 +188,9 @@
 
 				(let* ((job-w-constr (aref estado job-nr task))
 			    	   (job-task-actual (copy-job-shop-task (job-task-w-constr-job-task (aref estado job-nr task))))
-				  	   (nr.maquina (job-shop-task-machine.nr job-task-actual))
+				  	   ;(nr.maquina (job-shop-task-machine.nr job-task-actual))
 				  	   ;(duration (job-shop-task-duration job-task-actual))
-				  	   (start.time (job-shop-task-start.time job-task-actual))
+				  	   ;(start.time (job-shop-task-start.time job-task-actual))
 				  	   (virt-time (job-task-w-constr-virtual-time job-w-constr))
 				  	   (job-task-w-const-copia nil))
 
@@ -233,13 +235,11 @@
 
   
   
-(defun optimize-schedule (job-problem)
+(defun optimize-schedule (job-problem))
 
-
-  )
-
-(defun estado-objectivo (estado)
-	(let* ((dimensions (array-dimensions estado))
+(defun estado-objectivo (state-job)
+	(let*  ((estado (state-job-schedule-jobs-tasks-space state-job))
+			(dimensions (array-dimensions estado))
 		 	(rows (car dimensions))
 		 	(columns (cadr dimensions)))
   		(loop for job from 0 to (- rows 1) do
@@ -247,8 +247,32 @@
   					(return-from estado-objectivo nil)))
   		t))
 
+; Heuristica Tempo Desperdicado (NaoAlocadas / (NMaquinas * TotalTarefas)) *(MaximoTempoMaquinas + SumDurationNonAllocated)
+(defun heuristica-tempo-desperdicado (estado)
+	(let* ((tarefas-nao-alocadas (state-job-schedule-non-allocated-tasks estado))
+		   (n-tarefas-nao-alocadas (list-length tarefas-nao-alocadas))
+		   (tempos-maquinas (state-job-schedule-machine-times estado))
+		   (n-maquinas (car (array-dimensions tempos-maquinas)))
+		   (total-number-tasks (state-job-schedule-number-tasks estado))
+		   (remaining-task-durations 0)
+		   (max-time-machine 0)
+		   (heuristica-value 0))
 
-; ideia para heuristica (NaoAlocadas / (NMaquinas * TotalTarefas)) *(MaximoTempoMaquinas + SumDurationNonAllocated)
+		;calcular duracao das tarefas que faltam realizar
+		(dolist (task n-tarefas-nao-alocadas)
+			(setf remaining-task-durations (+ remaining-task-durations (task-info-task-duration task))))
+
+		;determinar qual o tempo de funcionamento maximo de uma maquina ate agora
+		(dotimes (nr-maquina n-maquinas)
+			(let ((tempo-actual (aref tempos-maquinas nr-maquina)))
+				(if (and (not (null tempo-actual)) (> tempo-actual max-time-machine))
+					(setf max-time-machine tempo-actual))))
+
+		;calcular valor da heuristica no estado
+		(setf heuristica-value (* (/ n-tarefas-nao-alocadas (* n-maquinas total-number-tasks)) (+ max-time-machine remaining-task-durations)))
+		heuristica-value))
+
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ; Struct aux functions
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -287,43 +311,39 @@
 
 (defun beam-search (problema beam-width) 
   (let* ((*nos-gerados* 0)
-	 (*nos-expandidos* 0)
-	 (tempo-inicio (get-internal-run-time))
-	 (objectivo? (problema-objectivo? problema))
-	 (heur (problema-heuristica problema))
-	 ;(estado= (problema-estado= problema))
-	 ;thanks to Norvig
-	 (beam-sorter #'(lambda (old new)
-			 (let ((sorted (funcall (sorter heur) old new)))
-			   (if (> beam-width (length sorted))
-				sorted
-			      (subseq sorted 0 beam-width)))))
-	 (solucao nil)
-	 (tempo 300))
+		 (*nos-expandidos* 0)
+		 (tempo-inicio (get-internal-run-time))
+		 (objectivo? (problema-objectivo? problema))
+		 (heur (problema-heuristica problema))
+		 ;(estado= (problema-estado= problema))
+
+		 ;thanks to Norvig
+		 (beam-sorter #'(lambda (old new)
+				 (let ((sorted (funcall (sorter heur) old new)))
+				   (if (> beam-width (length sorted))
+						sorted
+				      (subseq sorted 0 beam-width)))))
+		 (solucao nil)
+		 (tempo 300))
 
     (labels ((beam (estados)
               (cond ((<= (- tempo (/ (- (get-internal-real-time) tempo-inicio) internal-time-units-per-second)) 0.2) (return-from beam-search solucao))
-		    ((funcall objectivo? (state-job-schedule-jobs-tasks-space estado)) (list estado))
-                    ((null estado) nil)
+				    ((funcall objectivo? (first estados)) (list (first estados)))
+                    ((null (first estados)) nil)
                     (t 
                      (let* ((sucessores-estado (problema-gera-sucessores problema (first estados)))
                             (sucessores-ordenados (funcall beam-sorter sucessores-estado (rest estados)));sucessores ate' beam width
                             )
-			(return-from beam (beam sucessores-ordenados))
-			)
-		      )
-		    )
-		  )
-	     )
+						(return-from beam (beam sucessores-ordenados)))))))
              (loop 
-		(let* ((aux-solucao nil))
-		  (setf aux-solucao (beam (list (problema-estado-inicial problema))))
-		  (if (null solucao)
-		      (setf solucao aux-solucao)
-		     (if (better-solution aux-solucao solucao)
-			 (setf solucao aux-solucao)))
-		  (when (<= (- tempo (/ (- (get-internal-real-time) tempo-inicio) internal-time-units-per-second)) 0.2)
-		      (return-from beam-search solucao)))))))
+				(let* ((aux-solucao nil))
+				  (setf aux-solucao (beam (list (problema-estado-inicial problema))))
+				  (if (null solucao)
+				      (setf solucao aux-solucao)
+				     (if (better-solution aux-solucao solucao)
+					 	(setf solucao aux-solucao)))
+				  (when (<= (- tempo (/ (- (get-internal-real-time) tempo-inicio) internal-time-units-per-second)) 0.2)
+				      (return-from beam-search solucao)))))))
 
 ;;;;;;;;;;;;;
 ;ILDS
@@ -342,7 +362,7 @@
     (labels ((ildsProbe (estado maxDiscrepancia rProfundidade)
                 (let* ((sucessores (problema-gera-sucessores problema estado))
                        (num-elem (list-length sucessores)))
-                     (cond 	((funcall objectivo? (state-job-schedule-jobs-tasks-space estado)) (list estado))
+                     (cond 	((funcall objectivo? estado) (list estado))
                      		((= 0 num-elem) nil)
                      		(t 
                      			(setf result nil)
@@ -351,7 +371,6 @@
                      			(if (and (> maxDiscrepancia 0) (null result))
                      				(dolist (suc (cdr sucessores))
                      					(setf result (ildsProbe suc (- maxDiscrepancia 1 ) (- rProfundidade 1)))
-                     					(print result)
                      					(when (not (null result))
                      					 	(return-from ildsProbe result))))
                  				(return-from ildsProbe result))))))
@@ -368,12 +387,11 @@
 		 (*nos-expandidos* 0)
 		 (tempo-inicio (get-internal-run-time))
 		 (objectivo? (problema-objectivo? problema))
-		 (heur (problema-heuristica problema))
 		 ;(estado= (problema-estado= problema))
 		 (solucao nil))
 
     (labels ((lanca-sonda (estado)
-              (cond ((funcall objectivo? (state-job-schedule-jobs-tasks-space estado)) (list estado))
+              (cond ((funcall objectivo? estado) (list estado))
                     ((null estado) nil)
                     (t 
                      (let* ((sucessores (problema-gera-sucessores problema estado))
@@ -384,5 +402,3 @@
              (loop while (null solucao) do
                (setf solucao (lanca-sonda (problema-estado-inicial problema))))
              (return-from sondagem-iterativa solucao))))
-             
-             
