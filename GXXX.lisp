@@ -11,7 +11,7 @@
 	  	  ((string-equal procura-str "Iterative-Sampling") (setf result (sondagem-iterativa internal-problema)))
 	  	  (t
 	    	(setf result (procura internal-problema procura-str))))
-    result))
+    (converte-para-visualizacao (car result))))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -30,25 +30,38 @@
 (defstruct state-job-schedule
 	machine-times
 	non-allocated-tasks
-	allocated-tasks
+	number-tasks
 	jobs-tasks-space)
 
 (defstruct task-info
+	job-id
 	task-id
 	task-duration)
 
 (defun converte-para-visualizacao (estado-interno)
-  ) 
+	(let*  ((jobs-tasks (state-job-schedule-jobs-tasks-space estado-interno))
+			(dimensions (array-dimensions jobs-tasks))
+       	 	(rows (car dimensions)) ;numero de jobs igual ao numero de linhas
+       	 	(columns (cadr dimensions))
+       	 	(return-list nil))
+		(dotimes (i rows)
+			(dotimes (j columns)
+				(setf return-list (append return-list (list (job-task-w-constr-job-task (aref jobs-tasks i j)))))))
+		return-list))
 
 (defun converte-para-estado-interno (job-shop-prob) 
   (let ((operadores (list #'inicia-task))
 		(n.jobs (job-shop-problem-n.jobs job-shop-prob))
 		(estado-inicial nil)
+		(state-job nil)
 		(max-num-tasks 0)
-		(jobs (job-shop-problem-jobs job-shop-prob)))
+		(n-total-tasks 0)
+		(jobs (job-shop-problem-jobs job-shop-prob))
+		(tasks-to-assign nil))
 
 	(dotimes (job n.jobs)
-	  (if (> (list-length (job-shop-job-tasks (nth job jobs))) max-num-tasks)
+		(setf n-total-tasks (+ n-total-tasks (list-length (job-shop-job-tasks (nth job jobs)))))
+		(if (> (list-length (job-shop-job-tasks (nth job jobs))) max-num-tasks)
 	      	(setf max-num-tasks (list-length (job-shop-job-tasks (nth job jobs))))))
 
 	(setf estado-inicial (make-array (list n.jobs max-num-tasks)))
@@ -59,6 +72,9 @@
 	      (let* ((job-task-wrapper (make-job-task-w-constr :job-task (copy-job-shop-task task) :virtual-time 0))
 		      	 (task-nr (job-shop-task-task.nr task)))
 
+		    (setf tasks-to-assign (append tasks-to-assign (list (make-task-info :job-id job
+		    																	:task-id task-nr
+		    																	:task-duration (job-shop-task-duration task)))))
 		    (setf (aref estado-inicial job task-nr) job-task-wrapper)))))
 
 	 ;inicializacao de precedencias
@@ -71,7 +87,12 @@
 			   		(duration-before (job-shop-task-duration job-task-before)))
 	      		(setf (job-task-w-constr-virtual-time job-w-constr) (+ virtual-time-before duration-before)))))
 
-	(cria-problema estado-inicial operadores :objectivo? #'estado-objectivo)))
+	(setf state-job (make-state-job-schedule :machine-times (make-array n.jobs)
+											 :non-allocated-tasks tasks-to-assign
+											 :number-tasks n-total-tasks
+											 :jobs-tasks-space estado-inicial))
+
+	(cria-problema state-job operadores :objectivo? #'estado-objectivo)))
   
 
 (defun proxima-tarefa (estado job)
@@ -88,11 +109,14 @@
 ;operador para gerar sucessores
 ;operador assume que as tasks estao ordenadas por ordem crescente
 ;estado interno e' um array de job-task-w-constr
-(defun inicia-task (estado)
+(defun inicia-task (state-job)
   (let* ((sucessores '())
+       	 (estado (state-job-schedule-jobs-tasks-space state-job))
        	 (dimensions (array-dimensions estado))
        	 (rows (car dimensions)) ;numero de jobs igual ao numero de linhas
-       	 (columns (cadr dimensions))) 
+       	 (columns (cadr dimensions))
+       	 (tempos-maquinas (state-job-schedule-machine-times state-job))
+       	 (tarefas-a-atribuir (state-job-schedule-non-allocated-tasks state-job))) 
 
     (loop for job from 0 to (- rows 1) do
       (let* ((prox-task (proxima-tarefa estado job))
@@ -101,7 +125,10 @@
 	    	 (nr.maquina nil)
 	    	 (last-start-time nil)
 	    	 (task-duration nil)
-	    	 (copia-task nil))
+	    	 (copia-task nil)
+	    	 (tempo-maquina-actual nil)
+	    	 (tempos-maquinas-actual nil)
+	    	 (tasks-to-assign-actual nil))
 
 	    (if (not (null prox-task))
 			(progn
@@ -116,14 +143,35 @@
 			  ;o numero da maquina
 			  (setf nr.maquina (job-shop-task-machine.nr job-task))
 
-			  ;actualizar o tempo de inicio do job 
+			  ;actualizar o tempo de inicio do job
 			  (setf (job-shop-task-start.time copia-task) (job-task-w-constr-virtual-time (aref estado job prox-task)))
 			  (setf last-start-time (job-shop-task-start.time copia-task))
 			  (setf task-duration (job-shop-task-duration job-task))
 			  (setf (aref novo-estado job prox-task) (make-job-task-w-constr :job-task copia-task :virtual-time (job-shop-task-start.time copia-task)))
+
+			  ;actualizar os tempos possiveis de inicio de tasks que usam a mesma maquina ou que se seguem na lista de tasks do job
 			  (propaga-restr-tempo-task novo-estado prox-task job last-start-time task-duration)
 			  (propaga-restr-tempo-maquina novo-estado nr.maquina job last-start-time task-duration)
-			  (setf sucessores (cons novo-estado sucessores))))))
+
+			  ;actualizar tempos gastos nas maquinas
+			  (setf tempos-maquinas-actual (copy-array tempos-maquinas))
+			  (setf tempo-maquina-actual (aref tempos-maquinas-actual nr.maquina))
+			  (if (null tempo-maquina-actual)
+			  	(setf tempo-maquina-actual task-duration)
+			  	(setf tempo-maquina-actual (+ tempo-maquina-actual task-duration)))
+			  (setf (aref tempos-maquinas-actual nr.maquina) tempo-maquina-actual)
+
+			  ;actualizar lista de tasks por atribuir
+			  (dolist (task tarefas-a-atribuir)
+			  	(let ((task-nr (task-info-task-id task)) 
+			  		  (job-nr (task-info-job-id task)))
+			  		(if (not (and (= job job-nr) (= prox-task task-nr)))
+			  			(setf tasks-to-assign-actual (append tasks-to-assign-actual (list task))))))
+
+			  (setf sucessores (append sucessores (list (make-state-job-schedule :machine-times tempos-maquinas-actual
+																				 :non-allocated-tasks tasks-to-assign-actual
+																				 :number-tasks (state-job-schedule-number-tasks state-job)
+																				 :jobs-tasks-space novo-estado))))))))
     sucessores))
 
 (defun propaga-restr-tempo-task (estado task-nr job-nr last-start-time task-duration)
@@ -244,7 +292,7 @@
     (labels ((ildsProbe (estado maxDiscrepancia rProfundidade)
                 (let* ((sucessores (problema-gera-sucessores problema estado))
                        (num-elem (list-length sucessores)))
-                     (cond 	((funcall objectivo? estado) (list estado))
+                     (cond 	((funcall objectivo? (state-job-schedule-jobs-tasks-space estado)) (list estado))
                      		((= 0 num-elem) nil)
                      		(t 
                      			(setf result nil)
@@ -255,8 +303,8 @@
                      					(setf result (ildsProbe suc (- maxDiscrepancia 1 ) (- rProfundidade 1)))
                      					(print result)
                      					(when (not (null result))
-                     					 	(return-from ildsProbe (list result)))))
-                 				(return-from ildsProbe (list result)))))))
+                     					 	(return-from ildsProbe result))))
+                 				(return-from ildsProbe result))))))
 			(loop for maxDiscrepancia from 0 to numMaxDiscrepancia do
 				(setf result (ildsProbe (problema-estado-inicial problema) maxDiscrepancia (- numMaxDiscrepancia maxDiscrepancia)))
 				(when (not (null result))
@@ -274,7 +322,7 @@
 		 (solucao nil))
 
     (labels ((lanca-sonda (estado)
-              (cond ((funcall objectivo? estado) (list estado))
+              (cond ((funcall objectivo? (state-job-schedule-jobs-tasks-space estado)) (list estado))
                     ((null estado) nil)
                     (t 
                      (let* ((sucessores (problema-gera-sucessores problema estado))
@@ -284,4 +332,4 @@
                          (lanca-sonda (nth (random num-elem) sucessores))))))))
              (loop while (null solucao) do
                (setf solucao (lanca-sonda (problema-estado-inicial problema))))
-             (return-from sondagem-iterativa (list solucao)))))
+             (return-from sondagem-iterativa solucao))))
