@@ -13,8 +13,9 @@
 	  	  (t
 	    	(setf result (procura internal-problema procura-str))))
     (if (not (null result))
-    	(car result)
-    	;(converte-para-visualizacao (car result))
+    	(if (not (listp (car result)))
+    		(converte-para-visualizacao (car result))
+    		(converte-para-visualizacao (car (last (car result)))))
     	nil)))
 
 
@@ -91,7 +92,7 @@
 			   		(duration-before (job-shop-task-duration job-task-before)))
 	      		(setf (job-task-w-constr-virtual-time job-w-constr) (+ virtual-time-before duration-before)))))
 
-	(setf state-job (make-state-job-schedule :machine-times (make-array n.jobs)
+	(setf state-job (make-state-job-schedule :machine-times (make-array (list 2 n.jobs))
 											 :non-allocated-tasks tasks-to-assign
 											 :number-tasks n-total-tasks
 											 :jobs-tasks-space estado-inicial))
@@ -158,11 +159,12 @@
 
 			  ;actualizar tempos gastos nas maquinas
 			  (setf tempos-maquinas-actual (copy-array tempos-maquinas))
-			  (setf tempo-maquina-actual (aref tempos-maquinas-actual nr.maquina))
+			  (setf tempo-maquina-actual (aref tempos-maquinas-actual nr.maquina 0))
 			  (if (null tempo-maquina-actual)
 			  	(setf tempo-maquina-actual task-duration)
 			  	(setf tempo-maquina-actual (+ tempo-maquina-actual task-duration)))
-			  (setf (aref tempos-maquinas-actual nr.maquina) tempo-maquina-actual)
+			  (setf (aref tempos-maquinas-actual nr.maquina 0) tempo-maquina-actual)
+			  (setf (aref tempos-maquinas-actual nr.maquina 1) task-duration)
 
 			  ;actualizar lista de tasks por atribuir
 			  (dolist (task tarefas-a-atribuir)
@@ -265,7 +267,7 @@
 
 		;determinar qual o tempo de funcionamento maximo de uma maquina ate agora
 		(dotimes (nr-maquina n-maquinas)
-			(let ((tempo-actual (aref tempos-maquinas nr-maquina)))
+			(let ((tempo-actual (aref tempos-maquinas nr-maquina 0)))
 				(if (and (not (null tempo-actual)) (> tempo-actual max-time-machine))
 					(setf max-time-machine tempo-actual))))
 
@@ -273,13 +275,16 @@
 		(setf heuristica-value (* (/ n-tarefas-nao-alocadas (* n-maquinas total-number-tasks)) (+ max-time-machine remaining-task-durations)))
 		heuristica-value))
 
+
+; Função de Custo associado a um estado
 (defun maquina-gastou-mais-tempo (estado)
 	(let* ((tempos-maquinas (state-job-schedule-machine-times estado))
 		   (n-maquinas (car (array-dimensions tempos-maquinas)))
 		   (max-time-machine 0))
 		(dotimes (nr-maquina n-maquinas)
-			(let ((tempo-actual (aref tempos-maquinas nr-maquina)))
-				(if (and (not (null tempo-actual)) (> tempo-actual max-time-machine))
+			(let ((tempo-actual (aref tempos-maquinas nr-maquina 0))
+				  (last-task-duration (aref tempos-maquinas nr-maquina 1)))
+				(if (and (not (null tempo-actual)) (> (- tempo-actual last-task-duration) max-time-machine))
 					(setf max-time-machine tempo-actual))))
 		max-time-machine))
 
@@ -344,7 +349,7 @@
 
     (labels ((beam (estados)
               (cond ((<= (- tempo (/ (- (get-internal-run-time) tempo-inicio) internal-time-units-per-second)) 0.2) (return-from beam-search result))
-		    ((funcall objectivo? (first estados)) (list (first estados)))
+		    		((funcall objectivo? (first estados)) (list (first estados)))
                     ((null (first estados)) nil)
                     (t 
                      (let* ((sucessores-estado (problema-gera-sucessores problema (first estados)))
@@ -369,6 +374,7 @@
 ;;;;;;;;;;;;;
 ;Ref para ilds pseudo-codigo
 ;http://delivery.acm.org/10.1145/2020000/2019581/a1_6-prosser.pdf?ip=194.210.231.19&id=2019581&acc=ACTIVE%20SERVICE&key=2E5699D25B4FE09E%2EF7A57B2C5B227641%2E4D4702B0C3E38B35%2E4D4702B0C3E38B35&CFID=675816888&CFTOKEN=37766688&__acm__=1432052157_b9aa95a702e113482df3bdaed4e3b506
+;FIXME - ordenar sucessores por f = g + h
 (defun ilds (problema maxDepth) 
   (let ((*nos-gerados* 0)
 		(*nos-expandidos* 0)
