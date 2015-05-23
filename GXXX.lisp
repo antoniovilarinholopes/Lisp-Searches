@@ -273,7 +273,57 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ; Searches implementation
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;FIXME last search option
+;;;;;;;;;;;;;;;
+; Beam Search
+;;;;;;;;;;;;;;;
+
+
+;thanks to Norvig
+(defun sorter (heur)
+  "Return a combiner function that sorts according to heuristic."
+  #'(lambda (new old)
+      (sort (append new old) #'< :key heur)))
+
+
+(defun beam-search (problema beam-width) 
+  (let* ((*nos-gerados* 0)
+	 (*nos-expandidos* 0)
+	 (tempo-inicio (get-internal-run-time))
+	 (objectivo? (problema-objectivo? problema))
+	 (heur (problema-heuristica problema))
+	 ;(estado= (problema-estado= problema))
+	 ;thanks to Norvig
+	 (beam-sorter #'(lambda (old new)
+			 (let ((sorted (funcall (sorter heur) old new)))
+			   (if (> beam-width (length sorted))
+				sorted
+			      (subseq sorted 0 beam-width)))))
+	 (solucao nil)
+	 (tempo 300))
+
+    (labels ((beam (estados)
+              (cond ((<= (- tempo (/ (- (get-internal-real-time) tempo-inicio) internal-time-units-per-second)) 0.2) (return-from beam-search solucao))
+		    ((funcall objectivo? (state-job-schedule-jobs-tasks-space estado)) (list estado))
+                    ((null estado) nil)
+                    (t 
+                     (let* ((sucessores-estado (problema-gera-sucessores problema (first estados)))
+                            (sucessores-ordenados (funcall beam-sorter sucessores-estado (rest estados)));sucessores ate' beam width
+                            )
+			(return-from beam (beam sucessores-ordenados))
+			)
+		      )
+		    )
+		  )
+	     )
+             (loop 
+		(let* ((aux-solucao nil))
+		  (setf aux-solucao (beam (list (problema-estado-inicial problema))))
+		  (if (null solucao)
+		      (setf solucao aux-solucao)
+		     (if (better-solution aux-solucao solucao)
+			 (setf solucao aux-solucao)))
+		  (when (<= (- tempo (/ (- (get-internal-real-time) tempo-inicio) internal-time-units-per-second)) 0.2)
+		      (return-from beam-search solucao)))))))
 
 ;;;;;;;;;;;;;
 ;ILDS
@@ -318,6 +368,7 @@
 		 (*nos-expandidos* 0)
 		 (tempo-inicio (get-internal-run-time))
 		 (objectivo? (problema-objectivo? problema))
+		 (heur (problema-heuristica problema))
 		 ;(estado= (problema-estado= problema))
 		 (solucao nil))
 
@@ -333,3 +384,5 @@
              (loop while (null solucao) do
                (setf solucao (lanca-sonda (problema-estado-inicial problema))))
              (return-from sondagem-iterativa solucao))))
+             
+             
