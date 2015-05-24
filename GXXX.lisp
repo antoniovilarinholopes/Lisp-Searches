@@ -92,7 +92,7 @@
 			   		(duration-before (job-shop-task-duration job-task-before)))
 	      		(setf (job-task-w-constr-virtual-time job-w-constr) (+ virtual-time-before duration-before)))))
 
-	(setf state-job (make-state-job-schedule :machine-times (make-array (list 2 n.jobs))
+	(setf state-job (make-state-job-schedule :machine-times (make-array (list 2 (job-shop-problem-n.machines job-shop-prob)))
 											 :non-allocated-tasks tasks-to-assign
 											 :number-tasks n-total-tasks
 											 :jobs-tasks-space estado-inicial))
@@ -255,7 +255,7 @@
 	(let* ((tarefas-nao-alocadas (state-job-schedule-non-allocated-tasks estado))
 		   (n-tarefas-nao-alocadas (list-length tarefas-nao-alocadas))
 		   (tempos-maquinas (state-job-schedule-machine-times estado))
-		   (n-maquinas (car (array-dimensions tempos-maquinas)))
+		   (n-maquinas (cadr (array-dimensions tempos-maquinas)))
 		   (total-number-tasks (state-job-schedule-number-tasks estado))
 		   (remaining-task-durations 0)
 		   (max-time-machine 0)
@@ -267,9 +267,11 @@
 
 		;determinar qual o tempo de funcionamento maximo de uma maquina ate agora
 		(dotimes (nr-maquina n-maquinas)
-			(let ((tempo-actual (aref tempos-maquinas 0 nr-maquina)))
-				(if (and (not (null tempo-actual)) (> tempo-actual max-time-machine))
+			(let ((tempo-actual (aref tempos-maquinas 0 nr-maquina))
+				  (last-task-duration (aref tempos-maquinas 1 nr-maquina)))
+				(if (and (not (null tempo-actual)) (> (- tempo-actual last-task-duration) max-time-machine))
 					(setf max-time-machine tempo-actual))))
+					;(setf max-time-machine (- tempo-actual last-task-duration)))))
 
 		;calcular valor da heuristica no estado
 		(setf heuristica-value (* (/ n-tarefas-nao-alocadas (* n-maquinas total-number-tasks)) (+ max-time-machine remaining-task-durations)))
@@ -279,13 +281,14 @@
 ; Funcao de Custo associado a um estado
 (defun maquina-gastou-mais-tempo (estado)
 	(let* ((tempos-maquinas (state-job-schedule-machine-times estado))
-		   (n-maquinas (car (array-dimensions tempos-maquinas)))
+		   (n-maquinas (cadr (array-dimensions tempos-maquinas)))
 		   (max-time-machine 0))
 		(dotimes (nr-maquina n-maquinas)
 			(let ((tempo-actual (aref tempos-maquinas 0 nr-maquina))
 				  (last-task-duration (aref tempos-maquinas 1 nr-maquina)))
 				(if (and (not (null tempo-actual)) (> (- tempo-actual last-task-duration) max-time-machine))
-					(setf max-time-machine tempo-actual))))
+					;(setf max-time-machine tempo-actual))))
+					(setf max-time-machine (- tempo-actual last-task-duration)))))
 		max-time-machine))
 
 ;Funcao de comparacao de estados
