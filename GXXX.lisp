@@ -97,7 +97,7 @@
 											 :number-tasks n-total-tasks
 											 :jobs-tasks-space estado-inicial))
 
-	(cria-problema state-job operadores :objectivo? #'estado-objectivo :estado= #'estados-iguais :custo #'maquina-gastou-mais-tempo :heuristica #'heuristica-tempo-desperdicado)))
+	(cria-problema state-job operadores :objectivo? #'estado-objectivo :estado= #'estados-iguais :custo #'maquina-gastou-mais-tempo :heuristica #'heuristica-tempo-final)))
   
 
 (defun proxima-tarefa (estado job)
@@ -264,8 +264,8 @@
 		   (estimativa-fim-temporal 0)
 		   (heuristica-value 0)
 		   (parallel 0)
-		   (peso1 0.6)
-		   (peso2 0.4))
+		   (peso1 0.4)
+		   (peso2 0.6))
 		   
 		;estimativa do fim temporal do problema
 		(dolist (task tarefas-nao-alocadas)
@@ -282,8 +282,12 @@
 		(dotimes (nr-maquina n-maquinas)
 			(let ((tempo-actual (aref tempos-maquinas 0 nr-maquina))
 			      (last-task-duration (aref tempos-maquinas 1 nr-maquina)))
-			  (setf machines-time-working (+ machines-time-working tempo-actual))))
-		(setf parallel (/ machines-time-working (- total-number-tasks n-tarefas-nao-alocadas)))
+				(if (null tempo-actual)
+					(setf machines-time-working (+ machines-time-working 0))
+			  		(setf machines-time-working (+ machines-time-working tempo-actual)))))
+		(if (= 0 machines-time-working)
+			(setf parallel 0)
+			(setf parallel (/ (- total-number-tasks n-tarefas-nao-alocadas) machines-time-working)))
 		
 
 		;calcular valor da heuristica no estado
