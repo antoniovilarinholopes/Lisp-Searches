@@ -97,7 +97,7 @@
 											 :number-tasks n-total-tasks
 											 :jobs-tasks-space estado-inicial))
 
-	(cria-problema state-job operadores :objectivo? #'estado-objectivo :hash #'hash-generator :estado= #'estados-iguais :custo #'maquina-gastou-mais-tempo :heuristica #'heuristica-tempo-final)))
+	(cria-problema state-job operadores :objectivo? #'estado-objectivo :hash #'hash-generator :estado= #'estados-iguais :heuristica #'heuristica-tempo-final-v2)))
   
 
 (defun proxima-tarefa (estado job)
@@ -237,22 +237,18 @@
 
 
 
-(defun hash-generator(job-state)
-        (let* ((answer "")
-		(estado (state-job-schedule-jobs-tasks-space state-job))
-		(dimensions (array-dimensions estado))
-		(rows (car dimensions))
-		(columns (cadr dimensions)))
-	    (loop for job from 0 to (- rows 1)
-		(loop for task from 0 to (- columns 1)
-		  (let* ((task (job-task-w-constr (aref estado job task))))
-		    (if (not (null (task)))
-			(setf answer (concatenate 'string answer (write-to-string (job-task-w-constr-virtual-time (aref estado job task)))))
-			)
-		      )
-		   )
-		)
-            (return-from hash-generator answer)))
+(defun hash-generator (job-state)
+        (let*  ((answer "")
+				(estado (state-job-schedule-jobs-tasks-space job-state))
+				(dimensions (array-dimensions estado))
+				(rows (car dimensions))
+				(columns (cadr dimensions)))
+		    (loop for job from 0 to (- rows 1) do
+				(loop for task from 0 to (- columns 1) do
+			  		(let* ((task-constr (aref estado job task)))
+			    		(if (not (null  task-constr))
+							(setf answer (concatenate 'string answer (write-to-string (job-task-w-constr-virtual-time task-constr))))))))
+	        (return-from hash-generator answer)))
 
 
 (defun estado-objectivo (state-job)
@@ -266,6 +262,63 @@
   		t))
 
   		
+;heuristica que mede o tempo que falta para os trabalhos acabarem
+(defun heuristica-tempo-falta (job-state)
+	(let ((tarefas-nao-alocadas (state-job-schedule-non-allocated-tasks job-state))
+		  (heuristica-value 0))
+		(dolist (task tarefas-nao-alocadas)
+			(setf heuristica-value (+ heuristica-value (task-info-task-duration task))))
+		heuristica-value)) 		
+
+;heuristica que faz um peso entre o racio da paralelizacao e o tempo que falta para terminar a atribuicao
+(defun heuristica-tempo-final-v2 (job-state)
+	(let* ((tarefas-nao-alocadas (state-job-schedule-non-allocated-tasks job-state))
+		   (estado (state-job-schedule-jobs-tasks-space job-state))
+		   (n-tarefas-nao-alocadas (list-length tarefas-nao-alocadas))
+		   (tempos-maquinas (state-job-schedule-machine-times job-state))
+		   (n-maquinas (cadr (array-dimensions tempos-maquinas)))
+		   (total-number-tasks (state-job-schedule-number-tasks job-state))
+		   (machines-time-working 0)
+		   (estimativa-fim-temporal 0)
+		   (estimativa-max-tempo-trabalho 0)
+		   (heuristica-value 0)
+		   (parallel 0)
+		   (peso1 0.35)
+		   (peso2 0.6)
+		   (peso3 0.05))
+		   
+		;estimativa do fim temporal do problema
+		(dolist (task tarefas-nao-alocadas)
+		    (let* ((task-id (task-info-task-id task))
+				   (job-id (task-info-job-id task))
+				   (virtual-task-time-start (job-task-w-constr-virtual-time (aref estado job-id task-id)))
+				   (task-duration (task-info-task-duration task))
+				   (estimativa (+ virtual-task-time-start task-duration)))
+			(when (>  estimativa estimativa-fim-temporal)
+			  (setf estimativa-fim-temporal estimativa))))
+
+		;estimativa do tempo maximo que falta para acabar problema
+		(dolist (task tarefas-nao-alocadas)
+			(setf estimativa-max-tempo-trabalho (+ estimativa-max-tempo-trabalho (task-info-task-duration task))))
+		
+		;estimativa do quao boa esta a ser a paralelizacao
+		(dotimes (nr-maquina n-maquinas)
+			(let ((tempo-actual (aref tempos-maquinas 0 nr-maquina)))
+				(if (null tempo-actual)
+					(setf machines-time-working (+ machines-time-working 0))
+			  		(setf machines-time-working (+ machines-time-working tempo-actual)))))
+		(if (= 0 machines-time-working)
+			(setf parallel 0)
+			(setf parallel (/ (- total-number-tasks n-tarefas-nao-alocadas) machines-time-working)))
+		
+
+		;calcular valor da heuristica no estado
+		(setf heuristica-value (* n-tarefas-nao-alocadas (+ (* peso1 estimativa-fim-temporal) 
+															(* peso2 parallel)
+															(* peso3 estimativa-max-tempo-trabalho)
+															(* 0.7 (maquina-gastou-mais-tempo job-state)))))
+		heuristica-value))
+
 
 ;heuristica que faz um peso entre o racio da paralelizacao e de quanto falta para terminar
 (defun heuristica-tempo-final (job-state)
@@ -285,11 +338,10 @@
 		;estimativa do fim temporal do problema
 		(dolist (task tarefas-nao-alocadas)
 		    (let* ((task-id (task-info-task-id task))
-			  (job-id (task-info-job-id task))
-			  (virtual-task-time-start (job-task-w-constr-virtual-time (aref estado job-id task-id)))
-			  (task-duration (task-info-task-duration task))
-			  (estimativa (+ virtual-task-time-start task-duration))
-			  )
+				   (job-id (task-info-job-id task))
+				   (virtual-task-time-start (job-task-w-constr-virtual-time (aref estado job-id task-id)))
+				   (task-duration (task-info-task-duration task))
+				   (estimativa (+ virtual-task-time-start task-duration)))
 			(when (>  estimativa estimativa-fim-temporal)
 			  (setf estimativa-fim-temporal estimativa))))
 		
