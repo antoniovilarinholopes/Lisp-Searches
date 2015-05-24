@@ -252,7 +252,7 @@
 		      )
 		   )
 		)
-            (return-from hash-generator answer))
+            (return-from hash-generator answer)))
 
 
 (defun estado-objectivo (state-job)
