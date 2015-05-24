@@ -250,6 +250,47 @@
   					(return-from estado-objectivo nil)))
   		t))
 
+  		
+
+;heuristica que faz um peso entre o racio da paralelizacao e de quanto falta para terminar
+(defun heuristica-tempo-final (job-state)
+	(let* ((tarefas-nao-alocadas (state-job-schedule-non-allocated-tasks job-state))
+		   (estado (state-job-schedule-jobs-tasks-space job-state))
+		   (n-tarefas-nao-alocadas (list-length tarefas-nao-alocadas))
+		   (tempos-maquinas (state-job-schedule-machine-times job-state))
+		   (n-maquinas (cadr (array-dimensions tempos-maquinas)))
+		   (total-number-tasks (state-job-schedule-number-tasks job-state))
+		   (machines-time-working 0)
+		   (estimativa-fim-temporal 0)
+		   (heuristica-value 0)
+		   (parallel 0)
+		   (peso1 0.6)
+		   (peso2 0.4))
+		   
+		;estimativa do fim temporal do problema
+		(dolist (task tarefas-nao-alocadas)
+		    (let* ((task-id (task-info-task-id task))
+			  (job-id (task-info-job-id task))
+			  (virtual-task-time-start (job-task-w-constr-virtual-time (aref estado job-id task-id)))
+			  (task-duration (task-info-task-duration task))
+			  (estimativa (+ virtual-task-time-start task-duration))
+			  )
+			(when (>  estimativa estimativa-fim-temporal)
+			  (setf estimativa-fim-temporal estimativa))))
+		
+		;estimativa do quao boa esta a ser a paralelizacao
+		(dotimes (nr-maquina n-maquinas)
+			(let ((tempo-actual (aref tempos-maquinas 0 nr-maquina))
+			      (last-task-duration (aref tempos-maquinas 1 nr-maquina)))
+			  (setf machines-time-working (+ machines-time-working tempo-actual))))
+		(setf parallel (/ machines-time-working (- total-number-tasks n-tarefas-nao-alocadas)))
+		
+
+		;calcular valor da heuristica no estado
+		(setf heuristica-value (* n-tarefas-nao-alocadas (+ (* peso1 estimativa-fim-temporal) (* peso2 parallel))))
+		heuristica-value))
+		
+		
 ; Heuristica Tempo Desperdicado (NaoAlocadas / (NMaquinas * TotalTarefas)) *(MaximoTempoMaquinas + SumDurationNonAllocated)
 (defun heuristica-tempo-desperdicado (estado)
 	(let* ((tarefas-nao-alocadas (state-job-schedule-non-allocated-tasks estado))
