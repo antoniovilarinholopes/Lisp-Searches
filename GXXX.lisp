@@ -284,7 +284,7 @@
 		   (heuristica-value 0)
 		   (parallel 0)
 		   (peso1 0.35)
-		   (peso2 0.6)
+		   (peso2 0.7)
 		   (peso3 0.05))
 		   
 		;estimativa do fim temporal do problema
@@ -316,7 +316,7 @@
 		(setf heuristica-value (* n-tarefas-nao-alocadas (+ (* peso1 estimativa-fim-temporal) 
 															(* peso2 parallel)
 															(* peso3 estimativa-max-tempo-trabalho)
-															(* 0.7 (maquina-gastou-mais-tempo job-state)))))
+															(* 0.55 (maquina-gastou-mais-tempo job-state)))))
 		heuristica-value))
 
 
