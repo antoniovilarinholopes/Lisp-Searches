@@ -97,7 +97,7 @@
 											 :number-tasks n-total-tasks
 											 :jobs-tasks-space estado-inicial))
 
-	(cria-problema state-job operadores :objectivo? #'estado-objectivo :estado= #'estados-iguais :custo #'maquina-gastou-mais-tempo :heuristica #'heuristica-tempo-final)))
+	(cria-problema state-job operadores :objectivo? #'estado-objectivo :hash #'hash-generator :estado= #'estados-iguais :custo #'maquina-gastou-mais-tempo :heuristica #'heuristica-tempo-final)))
   
 
 (defun proxima-tarefa (estado job)
@@ -236,9 +236,24 @@
 				      		(propaga-restr-tempo-task estado task job last-start-time task-duration))))))))))
 
 
-  
-  
-(defun optimize-schedule (job-problem))
+
+(defun hash-generator(job-state)
+        (let* ((answer "")
+		(estado (state-job-schedule-jobs-tasks-space state-job))
+		(dimensions (array-dimensions estado))
+		(rows (car dimensions))
+		(columns (cadr dimensions)))
+	    (loop for job from 0 to (- rows 1)
+		(loop for task from 0 to (- columns 1)
+		  (let* ((task (job-task-w-constr (aref estado job task))))
+		    (if (not (null (task)))
+			(setf answer (concatenate 'string answer (write-to-string (job-task-w-constr-virtual-time (aref estado job task)))))
+			)
+		      )
+		   )
+		)
+            (return-from hash-generator answer))
+
 
 (defun estado-objectivo (state-job)
 	(let*  ((estado (state-job-schedule-jobs-tasks-space state-job))
