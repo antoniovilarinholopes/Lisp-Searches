@@ -9,9 +9,9 @@
 		(result nil))
     (cond ((string-equal procura-str "ILDS") (setf result (ilds internal-problema 100)))
 	  	  ((string-equal procura-str "Iterative-Sampling") (setf result (sondagem-iterativa internal-problema)))
-	  	  ((string-equal procura-str "Local-Beam") (setf result (beam-search internal-problema 10)))
+	  	  ((string-equal procura-str "Local-Beam") (setf result (beam-search internal-problema 10 25)))
 	  	  (t
-	    	(setf result (procura internal-problema procura-str))))
+	    	(setf result (procura internal-problema procura-str :espaco-em-arvore? T))))
     (if (not (null result))
     	(if (not (listp (car result)))
     		(converte-para-visualizacao (car result))
@@ -97,7 +97,7 @@
 											 :number-tasks n-total-tasks
 											 :jobs-tasks-space estado-inicial))
 
-	(cria-problema state-job operadores :objectivo? #'estado-objectivo :heuristica #'heuristica-tempo-desperdicado :custo #'maquina-gastou-mais-tempo)))
+	(cria-problema state-job operadores :objectivo? #'estado-objectivo :estado= #'estados-iguais :custo #'maquina-gastou-mais-tempo :heuristica #'heuristica-tempo-desperdicado)))
   
 
 (defun proxima-tarefa (estado job)
@@ -159,12 +159,12 @@
 
 			  ;actualizar tempos gastos nas maquinas
 			  (setf tempos-maquinas-actual (copy-array tempos-maquinas))
-			  (setf tempo-maquina-actual (aref tempos-maquinas-actual nr.maquina 0))
+			  (setf tempo-maquina-actual (aref tempos-maquinas-actual 0 nr.maquina))
 			  (if (null tempo-maquina-actual)
 			  	(setf tempo-maquina-actual task-duration)
 			  	(setf tempo-maquina-actual (+ tempo-maquina-actual task-duration)))
-			  (setf (aref tempos-maquinas-actual nr.maquina 0) tempo-maquina-actual)
-			  (setf (aref tempos-maquinas-actual nr.maquina 1) task-duration)
+			  (setf (aref tempos-maquinas-actual 0 nr.maquina) tempo-maquina-actual)
+			  (setf (aref tempos-maquinas-actual 1 nr.maquina) task-duration)
 
 			  ;actualizar lista de tasks por atribuir
 			  (dolist (task tarefas-a-atribuir)
@@ -267,7 +267,7 @@
 
 		;determinar qual o tempo de funcionamento maximo de uma maquina ate agora
 		(dotimes (nr-maquina n-maquinas)
-			(let ((tempo-actual (aref tempos-maquinas nr-maquina 0)))
+			(let ((tempo-actual (aref tempos-maquinas 0 nr-maquina)))
 				(if (and (not (null tempo-actual)) (> tempo-actual max-time-machine))
 					(setf max-time-machine tempo-actual))))
 
@@ -276,18 +276,38 @@
 		heuristica-value))
 
 
-; Função de Custo associado a um estado
+; Funcao de Custo associado a um estado
 (defun maquina-gastou-mais-tempo (estado)
 	(let* ((tempos-maquinas (state-job-schedule-machine-times estado))
 		   (n-maquinas (car (array-dimensions tempos-maquinas)))
 		   (max-time-machine 0))
 		(dotimes (nr-maquina n-maquinas)
-			(let ((tempo-actual (aref tempos-maquinas nr-maquina 0))
-				  (last-task-duration (aref tempos-maquinas nr-maquina 1)))
+			(let ((tempo-actual (aref tempos-maquinas 0 nr-maquina))
+				  (last-task-duration (aref tempos-maquinas 1 nr-maquina)))
 				(if (and (not (null tempo-actual)) (> (- tempo-actual last-task-duration) max-time-machine))
 					(setf max-time-machine tempo-actual))))
 		max-time-machine))
 
+;Funcao de comparacao de estados
+(defun estados-iguais (job-estado1 job-estado2)
+	(let*  ((estado1 (state-job-schedule-jobs-tasks-space job-estado1))
+			(estado2 (state-job-schedule-jobs-tasks-space job-estado2))
+			(dimensions (array-dimensions estado1))
+           	(rows (car dimensions))
+           	(columns (car (cdr dimensions))))
+
+		(dotimes (job rows)
+			(dotimes (task columns)
+				(let* ((task-estado1 (aref estado1 job task))
+					   (task-estado2 (aref estado2 job task))
+					   (task1 (job-task-w-constr-job-task task-estado1))
+					   (task2 (job-task-w-constr-job-task task-estado2)))
+					(if (and (not (null task-estado1)) (not (null task-estado2)))
+						(if (not (and 	(= (job-shop-task-job.nr task1) (job-shop-task-job.nr task2))
+								   		(= (job-shop-task-task.nr task1) (job-shop-task-task.nr task2))
+									  	(equal (job-shop-task-start.time task1) (job-shop-task-start.time task2))))
+							(return-from estados-iguais nil))))))
+		(return-from estados-iguais t)))
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ; Struct aux functions
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -339,7 +359,7 @@
 (defun beam-search (problema beam-width max-beam-width) 
   (let* ((*nos-gerados* 0)
 		 (*nos-expandidos* 0)
-		 (tempo-inicio (get-internal-run-time))
+		 (tempo-inicio (get-internal-real-time))
 		 (objectivo? (problema-objectivo? problema))
 		 (heur (problema-heuristica problema))
 		 ;(estado= (problema-estado= problema))
@@ -366,7 +386,7 @@
 				  (if (< beam-width max-beam-width)
 					(incf beam-width)
 				      (return-from beam-search result))
-				  (when (<= (- tempo (/ (- (get-internal-run-time) tempo-inicio) internal-time-units-per-second)) 0.2)
+				  (when (<= (- tempo (/ (- (get-internal-real-time) tempo-inicio) internal-time-units-per-second)) 0.2)
 				      (return-from beam-search result)))))))
 
 ;;;;;;;;;;;;;
@@ -378,7 +398,8 @@
 (defun ilds (problema maxDepth) 
   (let ((*nos-gerados* 0)
 		(*nos-expandidos* 0)
-		(tempo-inicio (get-internal-run-time))
+		(tempo-inicio (get-internal-real-time))
+		(max-runtime 300)
 		(objectivo? (problema-objectivo? problema))
         ;(estado= (problema-estado= problema))
         (numMaxDiscrepancia maxDepth)
@@ -426,4 +447,4 @@
                          (lanca-sonda (nth (random num-elem) sucessores))))))))
              (loop while (null result) do
                (setf result (lanca-sonda (problema-estado-inicial problema))))
-             (return-from sondagem-iterativa solucao))))
+             (return-from sondagem-iterativa result))))
