@@ -8,14 +8,20 @@
   (let ((internal-problema nil)
 		(result nil))
     (cond ((string-equal procura-str "ILDS") (setf internal-problema (converte-para-estado-interno job-shop-problem #'heuristica-tempo-final-v2))
-    										  (setf result (ilds internal-problema 100)))
-	  	  ((string-equal procura-str "Iterative-Sampling") (setf internal-problema (converte-para-estado-interno job-shop-problem #'heuristica-tempo-final-v2))
-	  	  													(setf result (sondagem-iterativa internal-problema)))
-	  	  ((string-equal procura-str "Local-Beam") (setf internal-problema (converte-para-estado-interno job-shop-problem #'heuristica-tempo-final-v2))
-	  	  										    (setf result (beam-search internal-problema 10 25)))
-	  	  (t
+					     (setf result (ilds internal-problema 100)))
+	  ((string-equal procura-str "sondagem.iterativa") (setf internal-problema (converte-para-estado-interno job-shop-problem #'heuristica-tempo-final-v2))
+							   (setf result (sondagem-iterativa internal-problema)))
+	  ((string-equal procura-str "abordagem.alternativa") (setf internal-problema (converte-para-estado-interno job-shop-problem #'heuristica-tempo-final-v2))
+							      (setf result (beam-search internal-problema 10 25)))
+	  ;FIXME
+	  ((string-equal procura-str "melhor.alternativa") (setf internal-problema (converte-para-estado-interno job-shop-problem #'heuristica-tempo-final-v2))
+							   (setf result (beam-search internal-problema 10 25)))
+	  ;FIXME
+	  ((string-equal procura-str "a*.melhor.heuristica") (setf internal-problema (converte-para-estado-interno job-shop-problem #'heuristica-tempo-final-v2))
+							     (setf result (procura internal-problema "a*" :espaco-em-arvore? T)))
+	  (t		;FIXME
 	    	 (setf internal-problema (converte-para-estado-interno job-shop-problem #'heuristica-tempo-final-v2))
-	    	 (setf result (procura internal-problema procura-str :espaco-em-arvore? T))))
+	    	 (setf result (procura internal-problema "a*" :espaco-em-arvore? T))))
     (if (not (null result))
     	(if (not (listp (car result)))
     		(converte-para-visualizacao (car result))
@@ -515,7 +521,7 @@
 
 (defun is-better-solution (heur)
       #'(lambda (best-solution-so-far new-solution)
-	    (> (funcall heur (first new-solution)) (funcall heur (first best-solution-so-far)))))
+	    (< (funcall heur (first new-solution)) (funcall heur (first best-solution-so-far)))))
 	    
 (defun beam-search (problema beam-width max-beam-width) 
   (let* ((*nos-gerados* 0)
@@ -556,6 +562,13 @@
 ;Ref para ilds pseudo-codigo
 ;http://delivery.acm.org/10.1145/2020000/2019581/a1_6-prosser.pdf?ip=194.210.231.19&id=2019581&acc=ACTIVE%20SERVICE&key=2E5699D25B4FE09E%2EF7A57B2C5B227641%2E4D4702B0C3E38B35%2E4D4702B0C3E38B35&CFID=675816888&CFTOKEN=37766688&__acm__=1432052157_b9aa95a702e113482df3bdaed4e3b506
 ;FIXME - ordenar sucessores por f = g + h
+
+
+(defun ilds-sorter (heur)
+  "Return a combiner function that sorts according to heuristic."
+  #'(lambda (all-states)
+	(stable-sort all-states #'< :key heur)))
+
 (defun ilds (problema maxDepth) 
   (let ((*nos-gerados* 0)
 		(*nos-expandidos* 0)
@@ -567,7 +580,8 @@
         (result nil))
     
     (labels ((ildsProbe (estado maxDiscrepancia rProfundidade)
-                (let* ((sucessores (problema-gera-sucessores problema estado))
+                (let* ((sucessores-nao-ordenados (problema-gera-sucessores problema estado))
+		       (sucessores (funcall (ilds-sorter (problema-heuristica problema)) sucessores-nao-ordenados))
                        (num-elem (list-length sucessores)))
                      (cond 	((funcall objectivo? estado) (list estado))
                      		((= 0 num-elem) nil)
