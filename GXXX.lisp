@@ -194,15 +194,22 @@
 																				 :jobs-tasks-space novo-estado
 																				 :funcao-heuristica funcao-heuristica-estado))))))))
 	
-	;(dolist (sucessor sucessores)
-	;	(let ((state-value (funcall funcao-heuristica-estado sucessor))
-	;		  (max-sucessor-number (min (max 3 (round (/ (list-length sucessores) 2))) 15)))
-	;		(if (< (list-length sucessor-list) max-sucessor-number)
-	;			(progn
-	;				(setf sucessor-list (append sucessor-list (list sucessor)))
-	;				(if (< state-value min-state-value)
-	;					(setf min-state-value state-value)))
-	;			)))
+	(if (> (list-length sucessores) 15)
+		(progn
+			(dolist (sucessor sucessores)
+				(let ((state-value (funcall funcao-heuristica-estado sucessor))
+					  (max-sucessor-number (min (max 3 (round (/ (list-length sucessores) 2))) 15)))
+					(if (< (list-length sucessor-list) max-sucessor-number)
+						(progn
+							(setf sucessor-list (insert-ordered-heuristic sucessor-list sucessor funcao-heuristica-estado))
+							(if (> state-value min-state-value)
+								(setf min-state-value state-value)))
+						(if (< state-value min-state-value)
+							(progn
+								(setf sucessor-list (insert-ordered-heuristic sucessor-list sucessor funcao-heuristica-estado))
+								(setf sucessor-list (remove (car (last sucessor-list)) sucessor-list))
+								(setf min-state-value (funcall funcao-heuristica-estado (car (last sucessor-list)))))))))
+			(setf sucessores sucessor-list)))
 
     sucessores))
 
@@ -483,7 +490,7 @@
 		   (heuristic-value (funcall heuristic-function elem))
 		   (lst-size (list-length lst)))
 		(if (null lst)
-			(setf new-list (append new-list elem))
+			(setf new-list (append new-list (list elem)))
 			(progn
 				(dolist (lst-elem lst)
 					(if (< heuristic-value (funcall heuristic-function lst-elem))
@@ -491,8 +498,8 @@
 							(setf new-list (append new-list (list elem lst-elem)))
 							(setf heuristic-value most-positive-fixnum))
 						(setf new-list (append new-list (list lst-elem)))))
-				(if (= lst-size)
-					())))
+				(if (= lst-size (list-length new-list))
+					(setf new-list (append new-list (list elem))))))
 		new-list))
 
 
