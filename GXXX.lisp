@@ -12,7 +12,7 @@
 	  ((string-equal procura-str "sondagem.iterativa") (setf internal-problema (converte-para-estado-interno job-shop-problem #'heuristica-tempo-final-v2))
 							   (setf result (sondagem-iterativa internal-problema)))
 	  ((string-equal procura-str "abordagem.alternativa") (setf internal-problema (converte-para-estado-interno job-shop-problem #'heuristica-tempo-final-v2))
-							      (setf result (beam-search internal-problema 10 25)))
+							      (setf result (beam-search internal-problema #'is-better-solution-job-shop 10 25)))
 	  ;FIXME
 	  ((string-equal procura-str "melhor.alternativa") (setf internal-problema (converte-para-estado-interno job-shop-problem #'heuristica-tempo-final-v2))
 							   (setf result (beam-search internal-problema 10 25)))
@@ -33,9 +33,9 @@
 ; Job Shop aux
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-(defstruct job-schedule 
-  job-shop-problem
-  best-schedule)
+;; (defstruct job-schedule 
+;;   job-shop-problem
+;;   best-schedule)
 
  ;Used to propagate time constraint from task precendence and machine precendence
 (defstruct job-task-w-constr
@@ -519,11 +519,30 @@
 		(subseq sorted 0 beam-width))))
  		)
 
-(defun is-better-solution (heur)
-      #'(lambda (best-solution-so-far new-solution)
-	    (< (funcall heur (first new-solution)) (funcall heur (first best-solution-so-far)))))
+(defun is-better-solution-job-shop (best-solution-so-far new-solution) 
+    (let* ((end-best 0)
+	   (end-new 0)
+	   (estado-best-solution (state-job-schedule-jobs-tasks-space (car best-solution-so-far)))
+	   (estado-new-solution (state-job-schedule-jobs-tasks-space (car new-solution)))
+	   (dimensions (array-dimensions estado-new-solution))
+           (rows (car dimensions))
+           (columns (car (cdr dimensions)))
+	   )
+	   (loop for job from 0 to (- rows 1) do
+	      (loop for task from 0 to (- columns 1) do
+		  (let* ((job-task-new (job-task-w-constr-job-task (aref estado-new-solution job task)))
+			(job-task-best (job-task-w-constr-job-task (aref estado-best-solution job task)))
+			(end-aux-new (+ (job-shop-task-duration job-task-new) (job-shop-task-start.time job-task-new)))
+			(end-aux-best (+ (job-shop-task-duration job-task-best) (job-shop-task-start.time job-task-best)))
+			)
+		    (when (> end-aux-new end-new)
+			(setf end-new end-aux-new))
+		    (when (> end-aux-best end-best)
+			(setf end-best end-aux-best)))))
+	   (return-from is-better-solution-job-shop (< end-new end-best))))
+      
 	    
-(defun beam-search (problema beam-width max-beam-width) 
+(defun beam-search (problema is-better-solution-fn beam-width max-beam-width) 
   (let* ((*nos-gerados* 0)
 		 (*nos-expandidos* 0)
 		 (tempo-inicio (get-internal-real-time))
@@ -533,7 +552,6 @@
 
 		 (result nil)
 		 (tempo 300))
-
     (labels ((beam (estados)
               (cond ((<= (- tempo (/ (- (get-internal-run-time) tempo-inicio) internal-time-units-per-second)) 0.2) (return-from beam-search result))
 		    		((funcall objectivo? (first estados)) (list (first estados)))
@@ -548,7 +566,7 @@
 				  (setf aux-result (beam (list (problema-estado-inicial problema))))
 				  (if (null result)
 				      (setf result aux-result)
-				     (if (funcall (is-better-solution heur) result aux-result)
+				     (if (funcall is-better-solution-fn result aux-result)
 					 	(setf result aux-result)))
 				  (if (< beam-width max-beam-width)
 					(incf beam-width)
