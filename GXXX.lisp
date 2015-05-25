@@ -5,13 +5,17 @@
 
 
 (defun calendarizacao (job-shop-problem procura-str) 
-  (let ((internal-problema (converte-para-estado-interno job-shop-problem))
+  (let ((internal-problema nil)
 		(result nil))
-    (cond ((string-equal procura-str "ILDS") (setf result (ilds internal-problema 100)))
-	  	  ((string-equal procura-str "Iterative-Sampling") (setf result (sondagem-iterativa internal-problema)))
-	  	  ((string-equal procura-str "Local-Beam") (setf result (beam-search internal-problema 10 25)))
+    (cond ((string-equal procura-str "ILDS") (setf internal-problema (converte-para-estado-interno job-shop-problem #'heuristica-tempo-final-v2))
+    										  (setf result (ilds internal-problema 100)))
+	  	  ((string-equal procura-str "Iterative-Sampling") (setf internal-problema (converte-para-estado-interno job-shop-problem #'heuristica-tempo-final-v2))
+	  	  													(setf result (sondagem-iterativa internal-problema)))
+	  	  ((string-equal procura-str "Local-Beam") (setf internal-problema (converte-para-estado-interno job-shop-problem #'heuristica-tempo-final-v2))
+	  	  										    (setf result (beam-search internal-problema 10 25)))
 	  	  (t
-	    	(setf result (procura internal-problema procura-str :espaco-em-arvore? T))))
+	    	 (setf internal-problema (converte-para-estado-interno job-shop-problem #'heuristica-tempo-final-v2))
+	    	 (setf result (procura internal-problema procura-str :espaco-em-arvore? T))))
     (if (not (null result))
     	(if (not (listp (car result)))
     		(converte-para-visualizacao (car result))
@@ -36,7 +40,8 @@
 	machine-times
 	non-allocated-tasks
 	number-tasks
-	jobs-tasks-space)
+	jobs-tasks-space
+	funcao-heuristica)
 
 (defstruct task-info
 	job-id
@@ -54,7 +59,7 @@
 				(setf return-list (append return-list (list (job-task-w-constr-job-task (aref jobs-tasks i j)))))))
 		return-list))
 
-(defun converte-para-estado-interno (job-shop-prob) 
+(defun converte-para-estado-interno (job-shop-prob funcao-heuristica) 
   (let ((operadores (list #'inicia-task))
 		(n.jobs (job-shop-problem-n.jobs job-shop-prob))
 		(estado-inicial nil)
@@ -95,9 +100,10 @@
 	(setf state-job (make-state-job-schedule :machine-times (make-array (list 2 (job-shop-problem-n.machines job-shop-prob)))
 											 :non-allocated-tasks tasks-to-assign
 											 :number-tasks n-total-tasks
-											 :jobs-tasks-space estado-inicial))
+											 :jobs-tasks-space estado-inicial
+											 :funcao-heuristica funcao-heuristica))
 
-	(cria-problema state-job operadores :objectivo? #'estado-objectivo :hash #'hash-generator :estado= #'estados-iguais :heuristica #'heuristica-tempo-final-v2)))
+	(cria-problema state-job operadores :objectivo? #'estado-objectivo :hash #'hash-generator :estado= #'estados-iguais :heuristica funcao-heuristica)))
   
 
 (defun proxima-tarefa (estado job)
@@ -120,7 +126,8 @@
        	 (dimensions (array-dimensions estado))
        	 (rows (car dimensions)) ;numero de jobs igual ao numero de linhas
        	 (tempos-maquinas (state-job-schedule-machine-times state-job))
-       	 (tarefas-a-atribuir (state-job-schedule-non-allocated-tasks state-job))) 
+       	 (tarefas-a-atribuir (state-job-schedule-non-allocated-tasks state-job))
+       	 (funcao-heuristica-estado (state-job-schedule-funcao-heuristica state-job))) 
 
     (loop for job from 0 to (- rows 1) do
       (let* ((prox-task (proxima-tarefa estado job))
@@ -132,7 +139,9 @@
 	    	 (copia-task nil)
 	    	 (tempo-maquina-actual nil)
 	    	 (tempos-maquinas-actual nil)
-	    	 (tasks-to-assign-actual nil))
+	    	 (tasks-to-assign-actual nil)
+	    	 (min-state-value most-positive-fixnum)
+	    	 (sucessor-list nil))
 
 	    (if (not (null prox-task))
 			(progn
@@ -176,7 +185,19 @@
 			  (setf sucessores (append sucessores (list (make-state-job-schedule :machine-times tempos-maquinas-actual
 																				 :non-allocated-tasks tasks-to-assign-actual
 																				 :number-tasks (state-job-schedule-number-tasks state-job)
-																				 :jobs-tasks-space novo-estado))))))))
+																				 :jobs-tasks-space novo-estado
+																				 :funcao-heuristica funcao-heuristica-estado))))))))
+	
+	;(dolist (sucessor sucessores)
+	;	(let ((state-value (funcall funcao-heuristica-estado sucessor))
+	;		  (max-sucessor-number (min (max 3 (round (/ (list-length sucessores) 2))) 15)))
+	;		(if (< (list-length sucessor-list) max-sucessor-number)
+	;			(progn
+	;				(setf sucessor-list (append sucessor-list (list sucessor)))
+	;				(if (< state-value min-state-value)
+	;					(setf min-state-value state-value)))
+	;			)))
+
     sucessores))
 
 (defun propaga-restr-tempo-task (estado task-nr job-nr last-start-time task-duration)
@@ -200,6 +221,7 @@
 						;(setf job-task-w-const-copia (make-job-task-w-constr :job-task job-task-actual :virtual-time (+ virt-time task-duration)))
 						(setf job-task-w-const-copia (make-job-task-w-constr :job-task job-task-actual :virtual-time (max virt-time virtual-time-inc)))
 			      		(setf (aref estado job-nr task) job-task-w-const-copia)))))	
+
 
 (defun propaga-restr-tempo-maquina (estado maquina job-nr last-start-time task-duration)
   (let* ((virtual-time-inc (+ last-start-time task-duration))
@@ -316,7 +338,7 @@
 		(setf heuristica-value (* n-tarefas-nao-alocadas (+ (* peso1 estimativa-fim-temporal) 
 															(* peso2 parallel)
 															(* peso3 estimativa-max-tempo-trabalho)
-															(* 0.55 (maquina-gastou-mais-tempo job-state)))))
+															(* 0.55 (- (maquina-gastou-mais-tempo job-state) 1)))))
 		heuristica-value))
 
 
@@ -386,7 +408,9 @@
 					;(setf max-time-machine (- tempo-actual last-task-duration)))))
 
 		;calcular valor da heuristica no estado
-		(setf heuristica-value (* (/ n-tarefas-nao-alocadas (* n-maquinas total-number-tasks)) (+ max-time-machine remaining-task-durations)))
+		(setf heuristica-value (* (/ n-tarefas-nao-alocadas (* n-maquinas total-number-tasks)) (+ max-time-machine 
+																								  remaining-task-durations
+																								  (* 0.9 (- (maquina-gastou-mais-tempo estado) 1)))))
 		heuristica-value))
 
 
@@ -423,6 +447,7 @@
 									  	(equal (job-shop-task-start.time task1) (job-shop-task-start.time task2))))
 							(return-from estados-iguais nil))))))
 		(return-from estados-iguais t)))
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ; Struct aux functions
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -442,6 +467,27 @@
    								 	 :start.time (job-shop-task-start.time task))))
 		copia))
 
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; Aux functions
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(defun insert-ordered-heuristic (lst elem heuristic-function)
+	(let* ((new-list nil)
+		   (heuristic-value (funcall heuristic-function elem))
+		   (lst-size (list-length lst)))
+		(if (null lst)
+			(setf new-list (append new-list elem))
+			(progn
+				(dolist (lst-elem lst)
+					(if (< heuristic-value (funcall heuristic-function lst-elem))
+						(progn
+							(setf new-list (append new-list (list elem lst-elem)))
+							(setf heuristic-value most-positive-fixnum))
+						(setf new-list (append new-list (list lst-elem)))))
+				(if (= lst-size)
+					())))
+		new-list))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
