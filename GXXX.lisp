@@ -8,15 +8,16 @@
   (let ((internal-problema nil)
 		(result nil))
     (cond ((string-equal procura-str "ILDS") (setf internal-problema (converte-para-estado-interno job-shop-problem #'heuristica-tempo-final-v2))
-					     (setf result (ilds internal-problema 100)))
+					     (setf result (ilds internal-problema (state-job-schedule-number-tasks (problema-estado-inicial internal-problema)))))
 	  ((string-equal procura-str "sondagem.iterativa") (setf internal-problema (converte-para-estado-interno job-shop-problem #'heuristica-tempo-final-v2))
 							   (setf result (sondagem-iterativa internal-problema)))
 	  ((string-equal procura-str "abordagem.alternativa") (setf internal-problema (converte-para-estado-interno job-shop-problem #'heuristica-tempo-final-v2))
-							      (setf result (beam-search internal-problema #'is-better-solution-job-shop 10 25)))
+							      (setf result (beam-search internal-problema #'is-better-solution-job-shop (job-shop-problem-n.jobs job-shop-problem) 
+							      																			(state-job-schedule-number-tasks (problema-estado-inicial internal-problema)))))
 	  ;FIXME
 	  ((string-equal procura-str "melhor.alternativa") (setf internal-problema (converte-para-estado-interno job-shop-problem #'heuristica-tempo-final-v2))
-							   (setf result (beam-search internal-problema 10 25)))
-	  ;FIXME
+							   (setf result (procura internal-problema "a*" :espaco-em-arvore? T)))
+
 	  ((string-equal procura-str "a*.melhor.heuristica") (setf internal-problema (converte-para-estado-interno job-shop-problem #'heuristica-tempo-final-v2))
 							     (setf result (procura internal-problema "a*" :espaco-em-arvore? T)))
 	  (t		;FIXME
@@ -133,7 +134,9 @@
        	 (rows (car dimensions)) ;numero de jobs igual ao numero de linhas
        	 (tempos-maquinas (state-job-schedule-machine-times state-job))
        	 (tarefas-a-atribuir (state-job-schedule-non-allocated-tasks state-job))
-       	 (funcao-heuristica-estado (state-job-schedule-funcao-heuristica state-job))) 
+       	 (funcao-heuristica-estado (state-job-schedule-funcao-heuristica state-job))
+    	 (min-state-value most-positive-fixnum)
+    	 (sucessor-list nil)) 
 
     (loop for job from 0 to (- rows 1) do
       (let* ((prox-task (proxima-tarefa estado job))
@@ -145,9 +148,7 @@
 	    	 (copia-task nil)
 	    	 (tempo-maquina-actual nil)
 	    	 (tempos-maquinas-actual nil)
-	    	 (tasks-to-assign-actual nil)
-	    	 (min-state-value most-positive-fixnum)
-	    	 (sucessor-list nil))
+	    	 (tasks-to-assign-actual nil))
 
 	    (if (not (null prox-task))
 			(progn
@@ -528,24 +529,23 @@
 
 (defun is-better-solution-job-shop (best-solution-so-far new-solution) 
     (let* ((end-best 0)
-	   (end-new 0)
-	   (estado-best-solution (state-job-schedule-jobs-tasks-space (car best-solution-so-far)))
-	   (estado-new-solution (state-job-schedule-jobs-tasks-space (car new-solution)))
-	   (dimensions (array-dimensions estado-new-solution))
+	   	   (end-new 0)
+	   	   (estado-best-solution (state-job-schedule-jobs-tasks-space (car best-solution-so-far)))
+	   	   (estado-new-solution (state-job-schedule-jobs-tasks-space (car new-solution)))
+	   	   (dimensions (array-dimensions estado-new-solution))
            (rows (car dimensions))
            (columns (car (cdr dimensions)))
 	   )
 	   (loop for job from 0 to (- rows 1) do
 	      (loop for task from 0 to (- columns 1) do
 		  (let* ((job-task-new (job-task-w-constr-job-task (aref estado-new-solution job task)))
-			(job-task-best (job-task-w-constr-job-task (aref estado-best-solution job task)))
-			(end-aux-new (+ (job-shop-task-duration job-task-new) (job-shop-task-start.time job-task-new)))
-			(end-aux-best (+ (job-shop-task-duration job-task-best) (job-shop-task-start.time job-task-best)))
-			)
+				 (job-task-best (job-task-w-constr-job-task (aref estado-best-solution job task)))
+				 (end-aux-new (+ (job-shop-task-duration job-task-new) (job-shop-task-start.time job-task-new)))
+				 (end-aux-best (+ (job-shop-task-duration job-task-best) (job-shop-task-start.time job-task-best))))
 		    (when (> end-aux-new end-new)
-			(setf end-new end-aux-new))
+				(setf end-new end-aux-new))
 		    (when (> end-aux-best end-best)
-			(setf end-best end-aux-best)))))
+				(setf end-best end-aux-best)))))
 	   (return-from is-better-solution-job-shop (< end-new end-best))))
       
 	    
@@ -586,8 +586,6 @@
 ;;;;;;;;;;;;;
 ;Ref para ilds pseudo-codigo
 ;http://delivery.acm.org/10.1145/2020000/2019581/a1_6-prosser.pdf?ip=194.210.231.19&id=2019581&acc=ACTIVE%20SERVICE&key=2E5699D25B4FE09E%2EF7A57B2C5B227641%2E4D4702B0C3E38B35%2E4D4702B0C3E38B35&CFID=675816888&CFTOKEN=37766688&__acm__=1432052157_b9aa95a702e113482df3bdaed4e3b506
-;FIXME - ordenar sucessores por f = g + h
-
 
 (defun ilds-sorter (heur)
   "Return a combiner function that sorts according to heuristic."
