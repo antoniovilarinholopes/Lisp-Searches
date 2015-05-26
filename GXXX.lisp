@@ -272,7 +272,6 @@
 				      		(propaga-restr-tempo-task estado task job last-start-time task-duration))))))))))
 
 
-
 (defun hash-generator (job-state)
         (let*  ((answer "")
 				(estado (state-job-schedule-jobs-tasks-space job-state))
@@ -284,6 +283,7 @@
 			  		(let* ((task-constr (aref estado job task)))
 			    		(if (not (null  task-constr))
 							(setf answer (concatenate 'string answer (write-to-string (job-task-w-constr-virtual-time task-constr))))))))
+		(setf answer (parse-integer answer))
 	        (return-from hash-generator answer)))
 
 
