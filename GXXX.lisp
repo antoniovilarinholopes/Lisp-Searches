@@ -8,25 +8,27 @@
   (let ((internal-problema nil)
 		(result nil))
     (cond ((string-equal procura-str "ILDS") (setf internal-problema (converte-para-estado-interno job-shop-problem #'heuristica-tempo-final-v2))
-					     (setf result (ilds internal-problema (state-job-schedule-number-tasks (problema-estado-inicial internal-problema)))))
+					     		(setf result (ilds internal-problema (state-job-schedule-number-tasks (problema-estado-inicial internal-problema)))))
 	  ((string-equal procura-str "sondagem.iterativa") (setf internal-problema (converte-para-estado-interno job-shop-problem #'heuristica-tempo-final-v2))
-							   (setf result (sondagem-iterativa internal-problema)))
+							   	(setf result (sondagem-iterativa internal-problema)))
 	  ((string-equal procura-str "abordagem.alternativa") (setf internal-problema (converte-para-estado-interno job-shop-problem #'heuristica-tempo-final-v2))
-							      (setf result (beam-search internal-problema #'is-better-solution-job-shop (job-shop-problem-n.jobs job-shop-problem) 
-							      																			(state-job-schedule-number-tasks (problema-estado-inicial internal-problema)))))
-	  ;FIXME
-	  ((string-equal procura-str "melhor.alternativa") (setf internal-problema (converte-para-estado-interno job-shop-problem #'heuristica-tempo-final-v2))
-							   (setf result (procura internal-problema "a*" :espaco-em-arvore? T)))
+							    (setf result (beam-search internal-problema #'is-better-solution-job-shop (job-shop-problem-n.jobs job-shop-problem) 
+							      																		  (state-job-schedule-number-tasks (problema-estado-inicial internal-problema)))))
+	  ((string-equal procura-str "melhor.abordagem") (setf internal-problema (converte-para-estado-interno job-shop-problem #'heuristica-tempo-final-v2))
+							   	(setf result (procura internal-problema "a*" :espaco-em-arvore? T)))
 
 	  ((string-equal procura-str "a*.melhor.heuristica") (setf internal-problema (converte-para-estado-interno job-shop-problem #'heuristica-tempo-final-v2))
-							     (setf result (procura internal-problema "a*" :espaco-em-arvore? T)))
-	  (t		;FIXME
+							    (setf result (procura internal-problema "a*" :espaco-em-arvore? T)))
+	  ((string-equal procura-str "a*.melhor.heuristica.alternativa") (setf internal-problema (converte-para-estado-interno job-shop-problem #'heuristica-tempo-desperdicado))
+	    						(setf result (procura internal-problema "a*" :espaco-em-arvore? T)))
+	  (t
 	    	 (setf internal-problema (converte-para-estado-interno job-shop-problem #'heuristica-tempo-final-v2))
-	    	 (setf result (procura internal-problema "a*" :espaco-em-arvore? T))))
+	    	 (setf result (procura internal-problema procura-str :espaco-em-arvore? T))))
+
     (if (not (null result))
-    	(if (not (listp (car result)))
-    		(converte-para-visualizacao (car result))
-    		(converte-para-visualizacao (car (last (car result)))))
+    	(if (> (list-length (car result)) 1)
+    		(list (converte-para-visualizacao (car (last (car result)))) (append (list (round (/ (cadr result) internal-time-units-per-second))) (cddr result)))
+    		(list (converte-para-visualizacao (caar result)) (cdr result)))
     	nil)))
 
 
@@ -272,6 +274,7 @@
 				      		(propaga-restr-tempo-task estado task job last-start-time task-duration))))))))))
 
 
+
 (defun hash-generator (job-state)
         (let*  ((answer "")
 				(estado (state-job-schedule-jobs-tasks-space job-state))
@@ -305,6 +308,7 @@
 		(dolist (task tarefas-nao-alocadas)
 			(setf heuristica-value (+ heuristica-value (task-info-task-duration task))))
 		heuristica-value)) 		
+
 
 ;heuristica que faz um peso entre o racio da paralelizacao e o tempo que falta para terminar a atribuicao
 (defun heuristica-tempo-final-v2 (job-state)
@@ -383,8 +387,7 @@
 		
 		;estimativa do quao boa esta a ser a paralelizacao
 		(dotimes (nr-maquina n-maquinas)
-			(let ((tempo-actual (aref tempos-maquinas 0 nr-maquina))
-			      (last-task-duration (aref tempos-maquinas 1 nr-maquina)))
+			(let ((tempo-actual (aref tempos-maquinas 0 nr-maquina)))
 				(if (null tempo-actual)
 					(setf machines-time-working (+ machines-time-working 0))
 			  		(setf machines-time-working (+ machines-time-working tempo-actual)))))
@@ -534,8 +537,7 @@
 	   	   (estado-new-solution (state-job-schedule-jobs-tasks-space (car new-solution)))
 	   	   (dimensions (array-dimensions estado-new-solution))
            (rows (car dimensions))
-           (columns (car (cdr dimensions)))
-	   )
+           (columns (car (cdr dimensions))))
 	   (loop for job from 0 to (- rows 1) do
 	      (loop for task from 0 to (- columns 1) do
 		  (let* ((job-task-new (job-task-w-constr-job-task (aref estado-new-solution job task)))
@@ -552,15 +554,16 @@
 (defun beam-search (problema is-better-solution-fn beam-width max-beam-width) 
   (let* ((*nos-gerados* 0)
 		 (*nos-expandidos* 0)
-		 (tempo-inicio (get-internal-real-time))
+		 (tempo-inicio (get-internal-run-time))
 		 (objectivo? (problema-objectivo? problema))
 		 (heur (problema-heuristica problema))
 		 ;(estado= (problema-estado= problema))
-
 		 (result nil)
 		 (tempo 300))
+
     (labels ((beam (estados)
-              (cond ((<= (- tempo (/ (- (get-internal-run-time) tempo-inicio) internal-time-units-per-second)) 0.2) (return-from beam-search result))
+              (cond ((<= (- tempo (/ (- (get-internal-run-time) tempo-inicio) internal-time-units-per-second)) 0.2)
+              		 (return-from beam-search (list result (round (/ (- (get-internal-run-time) tempo-inicio) internal-time-units-per-second)) *nos-expandidos* *nos-gerados*)))
 		    		((funcall objectivo? (first estados)) (list (first estados)))
                     ((null (first estados)) nil)
                     (t 
@@ -577,9 +580,9 @@
 					 	(setf result aux-result)))
 				  (if (< beam-width max-beam-width)
 					(incf beam-width)
-				      (return-from beam-search result))
+				      (return-from beam-search (list result (round (/ (- (get-internal-run-time) tempo-inicio) internal-time-units-per-second)) *nos-expandidos* *nos-gerados*)))
 				  (when (<= (- tempo (/ (- (get-internal-real-time) tempo-inicio) internal-time-units-per-second)) 0.2)
-				      (return-from beam-search result)))))))
+				      (return-from beam-search (list result (round (/ (- (get-internal-run-time) tempo-inicio) internal-time-units-per-second)) *nos-expandidos* *nos-gerados*))))))))
 
 ;;;;;;;;;;;;;
 ;ILDS
@@ -595,33 +598,53 @@
 (defun ilds (problema maxDepth) 
   (let ((*nos-gerados* 0)
 		(*nos-expandidos* 0)
-		(tempo-inicio (get-internal-real-time))
+		(tempo-inicio (get-internal-run-time))
 		(max-runtime 300)
 		(objectivo? (problema-objectivo? problema))
         ;(estado= (problema-estado= problema))
         (numMaxDiscrepancia maxDepth)
-        (result nil))
+        (current-result nil)
+        (out-result nil))
     
-    (labels ((ildsProbe (estado maxDiscrepancia rProfundidade)
+    (labels ((ildsProbe (estado maxDiscrepancia rProfundidade start-time)
                 (let* ((sucessores-nao-ordenados (problema-gera-sucessores problema estado))
-		       (sucessores (funcall (ilds-sorter (problema-heuristica problema)) sucessores-nao-ordenados))
-                       (num-elem (list-length sucessores)))
+		       		   (sucessores (funcall (ilds-sorter (problema-heuristica problema)) sucessores-nao-ordenados))
+                       (num-elem (list-length sucessores))
+                       (result nil)
+                       (result-temp nil))
                      (cond 	((funcall objectivo? estado) (list estado))
-                     		((= 0 num-elem) nil)
+                     		((or (= 0 num-elem) (<= (- max-runtime (/ (- (get-internal-run-time) tempo-inicio) internal-time-units-per-second)) 2.5)) nil)
                      		(t 
-                     			(setf result nil)
+                     			(setf result-temp nil)
                      			(if (> rProfundidade maxDiscrepancia)
-                     				(setf result (ildsProbe (car sucessores) maxDiscrepancia (- rProfundidade 1))))
+                     				(setf result-temp (ildsProbe (car sucessores) maxDiscrepancia (- rProfundidade 1) start-time)))
                      			(if (and (> maxDiscrepancia 0) (null result))
-                     				(dolist (suc (cdr sucessores))
-                     					(setf result (ildsProbe suc (- maxDiscrepancia 1 ) (- rProfundidade 1)))
-                     					(when (not (null result))
-                     					 	(return-from ildsProbe result))))
+                     				(progn
+	                     				(dolist (suc (cdr sucessores))
+	                     					(if (> (- max-runtime (/ (- (get-internal-run-time) tempo-inicio) internal-time-units-per-second)) 2.5)
+	                     						(progn
+			                     					(setf result-temp (ildsProbe suc (- maxDiscrepancia 1 ) (- rProfundidade 1) start-time))
+			                     					(when (not (null result-temp))
+			                     						(if (null result)
+			                     							(setf result result-temp)
+			                     							(if (is-better-solution-job-shop result result-temp)
+			                     								(setf result result-temp)))))
+	             					 		(return-from ildsProbe result)))))
+                     			(setf result result-temp)
                  				(return-from ildsProbe result))))))
+
 			(loop for maxDiscrepancia from 0 to numMaxDiscrepancia do
-				(setf result (ildsProbe (problema-estado-inicial problema) maxDiscrepancia (- numMaxDiscrepancia maxDiscrepancia)))
-				(when (not (null result))
-					(return-from ilds result))))))
+				(if (> (- max-runtime (/ (- (get-internal-run-time) tempo-inicio) internal-time-units-per-second)) 5)
+					(progn
+						(setf current-result (ildsProbe (problema-estado-inicial problema) maxDiscrepancia maxDepth tempo-inicio))
+						(when (not (null current-result))
+							(if (null out-result)
+								(setf out-result current-result)
+								(if (is-better-solution-job-shop out-result current-result)
+									(setf out-result current-result)))))
+					(return-from ilds (list out-result (round (/ (- (get-internal-run-time) tempo-inicio) internal-time-units-per-second)) *nos-expandidos* *nos-gerados*))))
+
+			(return-from ilds (list out-result (round (/ (- (get-internal-run-time) tempo-inicio) internal-time-units-per-second)) *nos-expandidos* *nos-gerados*)))))
 
 ;;;;;;;;;;;;;;;;;;;;;
 ;Iterative-Sampling
@@ -645,4 +668,5 @@
                          (lanca-sonda (nth (random num-elem) sucessores))))))))
              (loop while (null result) do
                (setf result (lanca-sonda (problema-estado-inicial problema))))
-             (return-from sondagem-iterativa result))))
+
+             (return-from sondagem-iterativa (list result (round (/ (- (get-internal-run-time) tempo-inicio) internal-time-units-per-second)) *nos-expandidos* *nos-gerados*)))))
