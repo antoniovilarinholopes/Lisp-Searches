@@ -1,3 +1,5 @@
+;Miguel Faria Nº 73092
+;Antonio Lopes Nº 73721
 (in-package :user)
 (load (compile-file "procura.lisp"))
 (load (compile-file "job-shop-problemas-modelos.lisp"))
@@ -9,23 +11,25 @@
 		(result nil))
     (cond ((string-equal procura-str "ILDS") (setf internal-problema (converte-para-estado-interno job-shop-problem #'heuristica-tempo-final-v2))
 					     		(setf result (ilds internal-problema (state-job-schedule-number-tasks (problema-estado-inicial internal-problema)))))
-	  ((string-equal procura-str "sondagem.iterativa") (setf internal-problema (converte-para-estado-interno job-shop-problem #'heuristica-tempo-final-v2))
+			((string-equal procura-str "ILDS.melhorado") (setf internal-problema (converte-para-estado-interno job-shop-problem #'heuristica-tempo-final-v2))
+					     		(setf result (ilds-best-solution internal-problema (state-job-schedule-number-tasks (problema-estado-inicial internal-problema)))))
+	  		((string-equal procura-str "sondagem.iterativa") (setf internal-problema (converte-para-estado-interno job-shop-problem #'heuristica-tempo-final-v2))
 							   	(setf result (sondagem-iterativa internal-problema)))
-	  ((string-equal procura-str "abordagem.alternativa") (setf internal-problema (converte-para-estado-interno job-shop-problem #'heuristica-tempo-final-v2))
+	 	 	((string-equal procura-str "abordagem.alternativa") (setf internal-problema (converte-para-estado-interno job-shop-problem #'heuristica-tempo-final-v2))
 							    (setf result (beam-search internal-problema #'is-better-solution-job-shop (job-shop-problem-n.jobs job-shop-problem) 
 							      																		  (state-job-schedule-number-tasks (problema-estado-inicial internal-problema)))))
-	  ((string-equal procura-str "melhor.abordagem") (setf internal-problema (converte-para-estado-interno job-shop-problem #'heuristica-tempo-final-v2))
+	  		((string-equal procura-str "melhor.abordagem") (setf internal-problema (converte-para-estado-interno job-shop-problem #'heuristica-tempo-final-v2))
 							   	(setf result (procura internal-problema "a*" :espaco-em-arvore? T)))
 
-	  ((string-equal procura-str "a*.melhor.heuristica") (setf internal-problema (converte-para-estado-interno job-shop-problem #'heuristica-tempo-final-v2))
+	  		((string-equal procura-str "a*.melhor.heuristica") (setf internal-problema (converte-para-estado-interno job-shop-problem #'heuristica-tempo-final-v2))
 							    (setf result (procura internal-problema "a*" :espaco-em-arvore? T)))
-	  ((string-equal procura-str "a*.melhor.heuristica.alternativa") (setf internal-problema (converte-para-estado-interno job-shop-problem #'heuristica-tempo-desperdicado))
+	  		((string-equal procura-str "a*.melhor.heuristica.alternativa") (setf internal-problema (converte-para-estado-interno job-shop-problem #'heuristica-tempo-desperdicado))
 	    						(setf result (procura internal-problema "a*" :espaco-em-arvore? T)))
-	  (t
-	    	 (setf internal-problema (converte-para-estado-interno job-shop-problem #'heuristica-tempo-final-v2))
-	    	 (setf result (procura internal-problema procura-str :espaco-em-arvore? T))))
+		    (t
+		    	 (setf internal-problema (converte-para-estado-interno job-shop-problem #'heuristica-tempo-final-v2))
+		    	 (setf result (procura internal-problema procura-str :espaco-em-arvore? T))))
 
-    (if (not (null result))
+    (if (and (not (null result)) (not (null (car result))))
     	(if (> (list-length (car result)) 1)
     		(list (converte-para-visualizacao (car (last (car result)))) (append (list (round (/ (cadr result) internal-time-units-per-second))) (cddr result)))
     		(list (converte-para-visualizacao (caar result)) (cdr result)))
@@ -527,8 +531,7 @@
 	  (let ((sorted (funcall (sorter heur) old new)))
 	    (if (> beam-width (length sorted))
 		  sorted
-		(subseq sorted 0 beam-width))))
- 		)
+		(subseq sorted 0 beam-width)))))
 
 (defun is-better-solution-job-shop (best-solution-so-far new-solution) 
     (let* ((end-best 0)
@@ -562,14 +565,11 @@
 		 (tempo 300))
 
     (labels ((beam (estados)
-              (cond ((<= (- tempo (/ (- (get-internal-run-time) tempo-inicio) internal-time-units-per-second)) 0.2)
-              		 (return-from beam-search (list result (round (/ (- (get-internal-run-time) tempo-inicio) internal-time-units-per-second)) *nos-expandidos* *nos-gerados*)))
-		    		((funcall objectivo? (first estados)) (list (first estados)))
-                    ((null (first estados)) nil)
+              (cond ((funcall objectivo? (first estados)) (list (first estados)))
+                    ((or (null (first estados)) (<= (- tempo (/ (- (get-internal-run-time) tempo-inicio) internal-time-units-per-second)) 1)) nil)
                     (t 
                      (let* ((sucessores-estado (problema-gera-sucessores problema (first estados)))
-                            (sucessores-ordenados (funcall (beam-sorter beam-width heur) sucessores-estado (rest estados)));sucessores ate' beam width
-                            )
+                            (sucessores-ordenados (funcall (beam-sorter beam-width heur) sucessores-estado (rest estados))));sucessores ate' beam width)
 			  (return-from beam (beam sucessores-ordenados)))))))
              (loop 
 				(let* ((aux-result nil))
@@ -581,7 +581,7 @@
 				  (if (< beam-width max-beam-width)
 					(incf beam-width)
 				      (return-from beam-search (list result (round (/ (- (get-internal-run-time) tempo-inicio) internal-time-units-per-second)) *nos-expandidos* *nos-gerados*)))
-				  (when (<= (- tempo (/ (- (get-internal-real-time) tempo-inicio) internal-time-units-per-second)) 0.2)
+				  (when (<= (- tempo (/ (- (get-internal-real-time) tempo-inicio) internal-time-units-per-second)) 2)
 				      (return-from beam-search (list result (round (/ (- (get-internal-run-time) tempo-inicio) internal-time-units-per-second)) *nos-expandidos* *nos-gerados*))))))))
 
 ;;;;;;;;;;;;;
@@ -596,6 +596,41 @@
 	(stable-sort all-states #'< :key heur)))
 
 (defun ilds (problema maxDepth) 
+  (let ((*nos-gerados* 0)
+		(*nos-expandidos* 0)
+		(tempo-inicio (get-internal-run-time))
+		(max-runtime 300)
+		(objectivo? (problema-objectivo? problema))
+        ;(estado= (problema-estado= problema))
+        (numMaxDiscrepancia maxDepth)
+        (out-result nil))
+    
+    (labels ((ildsProbe (estado maxDiscrepancia rProfundidade start-time)
+                (let* ((sucessores-nao-ordenados (problema-gera-sucessores problema estado))
+		       		   (sucessores (funcall (ilds-sorter (problema-heuristica problema)) sucessores-nao-ordenados))
+                       (num-elem (list-length sucessores))
+                       (result nil))
+                     (cond 	((funcall objectivo? estado) (list estado))
+                     		((or (= 0 num-elem) (<= (- max-runtime (/ (- (get-internal-run-time) tempo-inicio) internal-time-units-per-second)) 2.5)) nil)
+                     		(t 
+                     			(setf result nil)
+                     			(if (> rProfundidade maxDiscrepancia)
+                     				(setf result (ildsProbe (car sucessores) maxDiscrepancia (- rProfundidade 1) start-time)))
+                     			(if (and (> maxDiscrepancia 0) (null result))
+                     				(progn
+	                     				(dolist (suc (cdr sucessores))
+	                     					(setf result (ildsProbe suc (- maxDiscrepancia 1 ) (- rProfundidade 1) start-time))
+	                     					(when (not (null result))
+				                     			(return-from ildsProbe result)))))
+                 				(return-from ildsProbe result))))))
+
+			(loop for maxDiscrepancia from 0 to numMaxDiscrepancia do
+				(setf out-result (ildsProbe (problema-estado-inicial problema) maxDiscrepancia maxDepth tempo-inicio))
+				(when (not (null out-result))
+					(return-from ilds (list out-result (round (/ (- (get-internal-run-time) tempo-inicio) internal-time-units-per-second)) *nos-expandidos* *nos-gerados*)))))))
+
+; Versao melhorada do ILDS que enquanto tiver tempo procura pela melhor solucao possivel
+(defun ilds-best-solution (problema maxDepth) 
   (let ((*nos-gerados* 0)
 		(*nos-expandidos* 0)
 		(tempo-inicio (get-internal-run-time))
@@ -642,9 +677,9 @@
 								(setf out-result current-result)
 								(if (is-better-solution-job-shop out-result current-result)
 									(setf out-result current-result)))))
-					(return-from ilds (list out-result (round (/ (- (get-internal-run-time) tempo-inicio) internal-time-units-per-second)) *nos-expandidos* *nos-gerados*))))
+					(return-from ilds-best-solution (list out-result (round (/ (- (get-internal-run-time) tempo-inicio) internal-time-units-per-second)) *nos-expandidos* *nos-gerados*))))
 
-			(return-from ilds (list out-result (round (/ (- (get-internal-run-time) tempo-inicio) internal-time-units-per-second)) *nos-expandidos* *nos-gerados*)))))
+			(return-from ilds-best-solution (list out-result (round (/ (- (get-internal-run-time) tempo-inicio) internal-time-units-per-second)) *nos-expandidos* *nos-gerados*)))))
 
 ;;;;;;;;;;;;;;;;;;;;;
 ;Iterative-Sampling
